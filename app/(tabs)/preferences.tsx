@@ -4,7 +4,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Check } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
-import { trackEvent } from '@/lib/analytics';
 
 const GENRES = [
   'Rock', 'Pop', 'Hip-Hop', 'Electronic', 'Jazz', 'Classical',
@@ -62,14 +61,6 @@ export default function PreferencesScreen() {
         });
 
       if (error) throw error;
-
-      trackEvent('preference_updated', {
-        genres_count: selectedGenres.length,
-        moods_count: selectedMoods.length,
-        duration_range: `${minDuration}-${maxDuration}s`
-      });
-
-      // Show success feedback
     } catch (error) {
       console.error('Error saving preferences:', error);
     }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Play, Pause, Star, SkipForward } from 'lucide-react-native';
 import Animated, { 
@@ -10,9 +10,8 @@ import Animated, {
   withSequence,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Audio } from 'expo-av';
+import { Audio, AVPlaybackStatus } from 'expo-av';
 import { supabase } from '@/lib/supabase';
-import { trackEvent } from '@/lib/analytics';
 
 interface Track {
   id: string;
@@ -26,11 +25,13 @@ interface Track {
 
 export default function DiscoverScreen() {
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [rating, setRating] = useState(0);
   const [showRating, setShowRating] = useState(false);
   const [trackRevealed, setTrackRevealed] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
 
@@ -70,56 +71,77 @@ export default function DiscoverScreen() {
 
   const loadNextTrack = async () => {
     try {
+      setIsLoading(true);
+      setError(null);
+      
+      if (sound) {
+        await sound.unloadAsync();
+        setSound(null);
+      }
+      
       const { data, error } = await supabase
         .from('tracks')
         .select('*')
         .lt('spotify_streams', 5000)
-        .order('random()')
         .limit(1)
         .single();
 
       if (error) throw error;
+      if (!data?.audio_url) throw new Error('No audio URL found');
 
       setCurrentTrack(data);
       setRating(0);
       setShowRating(false);
       setTrackRevealed(false);
-      trackEvent('track_played', { track_id: data.id });
+      setIsPlaying(false);
+      setPosition(0);
+      setDuration(0);
     } catch (error) {
       console.error('Error loading track:', error);
+      setError('Failed to load track. Please try again.');
       Alert.alert('Error', 'Failed to load track');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const playPauseAudio = async () => {
     try {
+      if (!currentTrack?.audio_url) {
+        throw new Error('No audio URL available');
+      }
+
       if (sound) {
         const status = await sound.getStatusAsync();
         if (status.isLoaded) {
           if (isPlaying) {
             await sound.pauseAsync();
+            setIsPlaying(false);
           } else {
             await sound.playAsync();
+            setIsPlaying(true);
           }
         }
-      } else if (currentTrack) {
+      } else {
         const { sound: newSound } = await Audio.Sound.createAsync(
           { uri: currentTrack.audio_url },
-          { shouldPlay: true }
+          { shouldPlay: true },
+          onPlaybackStatusUpdate
         );
         setSound(newSound);
         setIsPlaying(true);
-
-        newSound.setOnPlaybackStatusUpdate((status) => {
-          if (status.isLoaded) {
-            setPosition(status.positionMillis || 0);
-            setDuration(status.durationMillis || 0);
-            setIsPlaying(status.isPlaying || false);
-          }
-        });
       }
     } catch (error) {
       console.error('Error playing audio:', error);
+      Alert.alert('Error', 'Failed to play audio');
+    }
+  };
+
+  const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
+    if (status.isLoaded) {
+      setPosition(status.positionMillis || 0);
+      setDuration(status.durationMillis || 0);
+      setIsPlaying(status.isPlaying || false);
     }
   };
 
@@ -129,7 +151,6 @@ export default function DiscoverScreen() {
       setSound(null);
     }
     setIsPlaying(false);
-    trackEvent('track_skipped', { track_id: currentTrack?.id });
     loadNextTrack();
   };
 
@@ -149,16 +170,9 @@ export default function DiscoverScreen() {
 
       if (error) throw error;
 
-      trackEvent('track_rated', { 
-        track_id: currentTrack.id, 
-        rating_value: stars 
-      });
-
       if (stars >= 4) {
         setTrackRevealed(true);
-        trackEvent('track_revealed', { track_id: currentTrack.id });
       } else {
-        trackEvent('track_dismissed', { track_id: currentTrack.id });
         setTimeout(() => {
           skipTrack();
         }, 2000);
@@ -167,6 +181,41 @@ export default function DiscoverScreen() {
       console.error('Error submitting rating:', error);
     }
   };
+
+  if (isLoading) {
+    return (
+      <LinearGradient
+        colors={['#1a1a1a', '#2a2a2a', '#1a1a1a']}
+        className="flex-1"
+      >
+        <SafeAreaView className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" color="#00ff41" />
+          <Text className="text-white mt-4">Loading track...</Text>
+        </SafeAreaView>
+      </LinearGradient>
+    );
+  }
+
+  if (error) {
+    return (
+      <LinearGradient
+        colors={['#1a1a1a', '#2a2a2a', '#1a1a1a']}
+        className="flex-1"
+      >
+        <SafeAreaView className="flex-1 items-center justify-center px-6">
+          <Text className="text-white text-center mb-4">{error}</Text>
+          <TouchableOpacity
+            onPress={loadNextTrack}
+            className="bg-neon-green px-8 py-4 rounded-full"
+          >
+            <Text className="text-black font-satoshi-bold text-lg">
+              Try Again
+            </Text>
+          </TouchableOpacity>
+        </SafeAreaView>
+      </LinearGradient>
+    );
+  }
 
   return (
     <LinearGradient
@@ -250,10 +299,10 @@ export default function DiscoverScreen() {
             <View className="items-center">
               <View className="w-64 h-64 rounded-2xl bg-dark-200 mb-8 overflow-hidden">
                 {currentTrack?.artwork_url ? (
-                  <img
-                    src={currentTrack.artwork_url}
-                    className="w-full h-full object-cover"
-                    alt="Track artwork"
+                  <Image
+                    source={{ uri: currentTrack.artwork_url }}
+                    className="w-full h-full"
+                    resizeMode="cover"
                   />
                 ) : (
                   <View className="w-full h-full bg-gradient-to-br from-neon-purple/30 to-neon-blue/30 items-center justify-center">

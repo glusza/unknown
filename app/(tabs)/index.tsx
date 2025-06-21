@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, Alert, Image, ActivityIndicator, TextInput, Keyboard, TouchableWithoutFeedback, ScrollView } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Alert, TextInput, Keyboard, TouchableWithoutFeedback, Platform, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Play, Pause, Star, SkipForward, Shuffle, Gift } from 'lucide-react-native';
+import { router } from 'expo-router';
+import { Shuffle } from 'lucide-react-native';
 import Animated, { 
   useAnimatedStyle, 
   useSharedValue, 
@@ -16,59 +17,30 @@ import Animated, {
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { fonts } from '@/lib/fonts';
+import { colors } from '@/utils/colors';
+import { spacing } from '@/utils/spacing';
+import { Button } from '@/components/buttons';
+import { Heading } from '@/components/typography';
 import ArtistUnveilView from '@/components/ArtistUnveilView';
-
-interface Track {
-  id: string;
-  title: string;
-  artist: string;
-  audio_url: string;
-  genre: string;
-  mood: string;
-  duration: number;
-  spotify_streams: number;
-  artwork_url?: string;
-}
-
-interface UserPreferences {
-  preferred_genres: string[];
-  preferred_moods: string[];
-  min_duration: number;
-  max_duration: number;
-}
-
-type DiscoverState = 'mood_selection' | 'loading' | 'playing' | 'rating' | 'revealed' | 'transitioning' | 'full_listening';
-
-const ALL_MOODS = [
-  'Energetic', 'Chill', 'Melancholic', 'Uplifting', 'Aggressive',
-  'Romantic', 'Mysterious', 'Nostalgic', 'Experimental', 'Peaceful',
-  'Dark', 'Dreamy', 'Intense', 'Playful', 'Contemplative', 'Euphoric'
-];
-
-const MOOD_EMOJIS: { [key: string]: string } = {
-  'Energetic': '⚡',
-  'Chill': '😌',
-  'Melancholic': '🌧️',
-  'Uplifting': '☀️',
-  'Aggressive': '🔥',
-  'Romantic': '💕',
-  'Mysterious': '🌙',
-  'Nostalgic': '🍂',
-  'Experimental': '🧪',
-  'Peaceful': '🕊️',
-  'Dark': '🖤',
-  'Dreamy': '☁️',
-  'Intense': '💥',
-  'Playful': '🎈',
-  'Contemplative': '🤔',
-  'Euphoric': '🌟'
-};
-
-interface AnimationBackgroundProps {
-  animationUrl?: string;
-  children: React.ReactNode;
-}
+import { Track, UserPreferences, DiscoverState, AnimationBackgroundProps } from '@/types';
+import {
+  MoodSelector,
+  LoadingState,
+  SessionHeader,
+  WelcomeTip,
+  PlaybackControls,
+  RatingInterface,
+  FullListeningMode,
+  ThankYouOverlay,
+  TransitionOverlay,
+  ErrorState,
+  NoTracksInPreferencesState,
+  NoTracksAtAllState,
+} from '@/components/discover';
+import { getMoodsForSession } from '@/utils/music';
+import { type Mood } from '@/utils/constants';
+import { MoodButtons } from '@/components/selection';
+import { Screen } from '@/components/layout/Screen';
 
 // Animation Background Component - placeholder for future animation files
 function AnimationBackground({ animationUrl, children }: AnimationBackgroundProps) {
@@ -94,6 +66,29 @@ function AnimationBackground({ animationUrl, children }: AnimationBackgroundProp
   );
 }
 
+// Helper function to check if audio URL is web-compatible
+const isWebCompatibleAudio = (url: string): boolean => {
+  if (Platform.OS !== 'web') return true;
+  
+  const webCompatibleFormats = ['.mp3', '.wav', '.ogg', '.m4a', '.aac'];
+  const urlLower = url.toLowerCase();
+  return webCompatibleFormats.some(format => urlLower.includes(format));
+};
+
+// Helper function to get a fallback audio URL for web
+const getWebCompatibleAudioUrl = (originalUrl: string): string => {
+  if (Platform.OS !== 'web') return originalUrl;
+  
+  // If the original URL is already web-compatible, return it
+  if (isWebCompatibleAudio(originalUrl)) {
+    return originalUrl;
+  }
+  
+  // For demo purposes, return a placeholder web-compatible audio file
+  // In production, you would convert/serve the audio in a web-compatible format
+  return 'https://www.soundjay.com/misc/sounds/bell-ringing-05.wav';
+};
+
 export default function DiscoverScreen() {
   // All hooks must be called at the top level in the same order every time
   const { user } = useAuth();
@@ -102,7 +97,7 @@ export default function DiscoverScreen() {
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [state, setState] = useState<DiscoverState>('mood_selection');
   const [selectedSessionMood, setSelectedSessionMood] = useState<string | null>(null);
-  const [availableMoods, setAvailableMoods] = useState<string[]>([]);
+  const [availableMoods, setAvailableMoods] = useState<Mood[]>([]);
   const [rating, setRating] = useState(0);
   const [review, setReview] = useState('');
   const [showRating, setShowRating] = useState(false);
@@ -121,6 +116,7 @@ export default function DiscoverScreen() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showReviewInput, setShowReviewInput] = useState(false);
   const [isReviewFocused, setIsReviewFocused] = useState(false);
+  const [totalTracksRated, setTotalTracksRated] = useState(0);
 
   // Ref hooks - always called in the same order
   const reviewInputRef = useRef<TextInput>(null);
@@ -312,6 +308,7 @@ export default function DiscoverScreen() {
     if (user?.id) {
       loadUserPreferences();
       checkFirstTimeUser();
+      loadUserStats();
     }
 
     return () => {
@@ -390,32 +387,41 @@ export default function DiscoverScreen() {
         .single();
 
       if (error && error.code !== 'PGRST116') {
-        console.error('Error loading preferences:', error);
-        return;
+        throw error;
       }
 
       if (data) {
         setUserPreferences(data);
-        // Set available moods - only 3 moods, preferably from user preferences
-        if (data.preferred_moods && data.preferred_moods.length > 0) {
-          // Shuffle user's preferred moods and take 3
-          const shuffledUserMoods = data.preferred_moods.sort(() => 0.5 - Math.random()).slice(0, 3);
-          setAvailableMoods(shuffledUserMoods);
-        } else {
-          // Show 3 random moods if no preferences
-          const randomMoods = ALL_MOODS.sort(() => 0.5 - Math.random()).slice(0, 3);
-          setAvailableMoods(randomMoods);
-        }
+        // Set available moods using the utility function
+        const moodsForSession = getMoodsForSession(data.preferred_moods || [], 3);
+        setAvailableMoods(moodsForSession);
       } else {
         // No preferences found, show 3 random moods
-        const randomMoods = ALL_MOODS.sort(() => 0.5 - Math.random()).slice(0, 3);
-        setAvailableMoods(randomMoods);
+        const moodsForSession = getMoodsForSession([], 3);
+        setAvailableMoods(moodsForSession);
       }
     } catch (error) {
       console.error('Error loading user preferences:', error);
       // Fallback to 3 random moods
-      const randomMoods = ALL_MOODS.sort(() => 0.5 - Math.random()).slice(0, 3);
-      setAvailableMoods(randomMoods);
+      const moodsForSession = getMoodsForSession([], 3);
+      setAvailableMoods(moodsForSession);
+    }
+  };
+
+  const loadUserStats = async () => {
+    if (!user?.id) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('user_ratings')
+        .select('id')
+        .eq('profile_id', user.id);
+
+      if (error) throw error;
+
+      setTotalTracksRated(data?.length || 0);
+    } catch (error) {
+      console.error('Error loading user stats:', error);
     }
   };
 
@@ -456,9 +462,9 @@ export default function DiscoverScreen() {
     }, 500);
   };
 
-  const loadNextTrack = async (isBackgroundLoad = false, sessionMood: string | null = null) => {
+  const loadNextTrack = async (isBackgroundLoad = false, sessionMood: string | null = null, broadenSearch = false) => {
     try {
-      if (!isBackgroundLoad) {
+      if (!isBackgroundLoad && state !== 'no_tracks_in_preferences' && state !== 'no_tracks_at_all') {
         setIsLoading(true);
         setError(null);
         setState('loading');
@@ -492,13 +498,13 @@ export default function DiscoverScreen() {
         query = query.not('id', 'in', `(${excludeIds.join(',')})`);
       }
 
-      // Apply session mood filter if selected (not "Surprise me")
-      if (sessionMood) {
+      // Apply session mood filter if selected (not "Surprise me") and not broadening search
+      if (sessionMood && !broadenSearch) {
         query = query.eq('mood', sessionMood);
       }
 
-      // Apply user preferences if available and no specific session mood
-      if (userPreferences && !sessionMood) {
+      // Apply user preferences if available and no specific session mood and not broadening search
+      if (userPreferences && !sessionMood && !broadenSearch) {
         if (userPreferences.preferred_genres && userPreferences.preferred_genres.length > 0) {
           query = query.in('genre', userPreferences.preferred_genres);
         }
@@ -518,26 +524,39 @@ export default function DiscoverScreen() {
       if (tracksError) throw tracksError;
 
       if (!tracks || tracks.length === 0) {
-        // If no tracks match preferences, try with relaxed filters
-        const { data: fallbackTracks, error: fallbackError } = await supabase
-          .from('tracks')
-          .select('*')
-          .lt('spotify_streams', 5000)
-          .not('id', 'in', excludeIds.length > 0 ? `(${excludeIds.join(',')})` : '()')
-          .limit(50);
+        // If no tracks match current criteria and we haven't broadened search yet
+        if (!broadenSearch) {
+          // Check if there are any tracks available at all (broadened search)
+          const { data: allTracks, error: allTracksError } = await supabase
+            .from('tracks')
+            .select('*')
+            .lt('spotify_streams', 5000)
+            .not('id', 'in', excludeIds.length > 0 ? `(${excludeIds.join(',')})` : '()')
+            .limit(1);
 
-        if (fallbackError) throw fallbackError;
+          if (allTracksError) throw allTracksError;
 
-        if (!fallbackTracks || fallbackTracks.length === 0) {
-          throw new Error('No more tracks available to discover');
+          if (allTracks && allTracks.length > 0) {
+            // There are tracks available, just not matching preferences
+            setState('no_tracks_in_preferences');
+            setIsLoading(false);
+            return;
+          } else {
+            // No tracks available at all
+            setState('no_tracks_at_all');
+            setIsLoading(false);
+            return;
+          }
+        } else {
+          // Even broadened search found nothing
+          setState('no_tracks_at_all');
+          setIsLoading(false);
+          return;
         }
-
-        const randomTrack = fallbackTracks[Math.floor(Math.random() * fallbackTracks.length)];
-        setCurrentTrack(randomTrack);
-      } else {
-        const randomTrack = tracks[Math.floor(Math.random() * tracks.length)];
-        setCurrentTrack(randomTrack);
       }
+
+      const randomTrack = tracks[Math.floor(Math.random() * tracks.length)];
+      setCurrentTrack(randomTrack);
 
       // Reset UI state
       setRating(0);
@@ -584,7 +603,7 @@ export default function DiscoverScreen() {
     // Fade out audio volume over 0.2 seconds
     if (sound) {
       try {
-        await sound.setVolumeAsync(0, { duration: 200 });
+        await sound.setVolumeAsync(0);
       } catch (error) {
         console.error('Error fading audio:', error);
       }
@@ -628,24 +647,34 @@ export default function DiscoverScreen() {
         throw new Error('No audio URL available');
       }
 
+      // Get web-compatible audio URL
+      const audioUrl = getWebCompatibleAudioUrl(currentTrack.audio_url);
+
       if (sound) {
         const status = await sound.getStatusAsync();
         if (status.isLoaded) {
           if (isPlaying) {
             // Fade out volume over 0.2 seconds when pausing
-            await sound.setVolumeAsync(0, { duration: 200 });
+            await sound.setVolumeAsync(0);
             await sound.pauseAsync();
             setIsPlaying(false);
           } else {
             // Restore volume and play
-            await sound.setVolumeAsync(1, { duration: 200 });
+            await sound.setVolumeAsync(1);
             await sound.playAsync();
             setIsPlaying(true);
           }
         }
       } else {
+        // Check if the audio URL is web-compatible before attempting to load
+        if (Platform.OS === 'web' && !isWebCompatibleAudio(currentTrack.audio_url)) {
+          console.warn('Audio file may not be web-compatible:', currentTrack.audio_url);
+          setError('Audio format not supported in web browser. Please use MP3, WAV, or OGG format.');
+          return;
+        }
+
         const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: currentTrack.audio_url },
+          { uri: audioUrl },
           { shouldPlay: true },
           onPlaybackStatusUpdate
         );
@@ -654,7 +683,20 @@ export default function DiscoverScreen() {
       }
     } catch (error) {
       console.error('Error playing audio:', error);
-      Alert.alert('Error', 'Failed to play audio');
+      
+      // Provide more specific error messages for web
+      if (Platform.OS === 'web') {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        if (errorMessage.includes('no supported source')) {
+          setError('Audio format not supported in web browser. Please ensure the audio file is in MP3, WAV, or OGG format and served with proper CORS headers.');
+        } else if (errorMessage.includes('CORS')) {
+          setError('Unable to load audio due to CORS restrictions. Please ensure the audio server allows cross-origin requests.');
+        } else {
+          setError('Failed to load audio. Please check the audio file format and server configuration.');
+        }
+      } else {
+        setError('Failed to play audio. Please try again.');
+      }
     }
   };
 
@@ -716,9 +758,15 @@ export default function DiscoverScreen() {
         console.error('Error updating user stats:', statsError);
       }
 
+      // Update local count
+      setTotalTracksRated(prev => prev + 1);
+
       if (stars >= 4) {
         setTrackRevealed(true);
         setState('revealed');
+        setShowThankYou(false);
+        setIsTransitioning(false);
+        setShowWelcomeTip(false);
       } else {
         showThankYouMessage();
       }
@@ -772,644 +820,228 @@ export default function DiscoverScreen() {
     loadUserPreferences();
   };
 
+  const handleBroadenSearch = () => {
+    setState('loading');
+    setIsLoading(true);
+    loadNextTrack(false, selectedSessionMood, true);
+  };
+
+  const handleChooseDifferentMood = () => {
+    setState('mood_selection');
+    setSelectedSessionMood(null);
+    setCurrentTrack(null);
+    if (sound) {
+      sound.unloadAsync();
+      setSound(null);
+    }
+    setIsPlaying(false);
+    setPosition(0);
+    setDuration(0);
+    resetRatingAnimations();
+    
+    // Refresh available moods
+    loadUserPreferences();
+  };
+
+  const handleGoToHistory = () => {
+    router.push('/(tabs)/history');
+  };
+
   const dismissKeyboard = () => {
     Keyboard.dismiss();
     setIsReviewFocused(false);
   };
 
+  // No tracks in preferences state
+  if (state === 'no_tracks_in_preferences') {
+    return (
+      <Screen backgroundColor="#19161a" withoutBottomSafeArea paddingHorizontal={0}>
+        <View style={{ flex: 1, paddingHorizontal: spacing.lg }}>
+          <SessionHeader
+            selectedMood={selectedSessionMood}
+            onNewSession={handleNewSession}
+          />
+          <NoTracksInPreferencesState
+            onBroadenSearch={handleBroadenSearch}
+            onChooseDifferentMood={handleChooseDifferentMood}
+            selectedMood={selectedSessionMood}
+          />
+        </View>
+      </Screen>
+    );
+  }
+
+  // No tracks at all state
+  if (state === 'no_tracks_at_all') {
+    return (
+      <Screen backgroundColor="#19161a" withoutBottomSafeArea paddingHorizontal={0}>
+        <View style={{ flex: 1, paddingHorizontal: spacing.lg }}>
+          <SessionHeader
+            selectedMood={selectedSessionMood}
+            onNewSession={handleNewSession}
+          />
+          <NoTracksAtAllState
+            onGoToHistory={handleGoToHistory}
+            totalTracksRated={totalTracksRated}
+          />
+        </View>
+      </Screen>
+    );
+  }
+
   // Mood Selection Screen
   if (state === 'mood_selection') {
     return (
-      <View style={{ backgroundColor: '#19161a', flex: 1 }}>
-        <SafeAreaView style={{ flex: 1 }}>
-          <AnimationBackground>
-            <Animated.View style={[moodSelectionStyle, { flex: 1, paddingHorizontal: 24 }]}>
-              {/* Header */}
-              <View style={{ alignItems: 'center', paddingTop: 32, paddingBottom: 64 }}>
-                <Text style={{ fontSize: 24, fontFamily: fonts.chillax.bold, color: '#ded7e0', marginBottom: 32 }}>
-                  unknown
-                </Text>
-                <Text style={{ fontSize: 28, fontFamily: fonts.chillax.bold, color: '#ded7e0', textAlign: 'center' }}>
-                  How do you feel today?
-                </Text>
-              </View>
+      <Screen backgroundColor="#19161a" withoutBottomSafeArea>
+        <AnimationBackground>
+          <View style={{ flex: 1, paddingHorizontal: spacing.lg }}>
+            {/* Header */}
+            <View style={{ alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.xxl }}>
+              <Heading variant="h3" color="primary" align="center" style={{ fontSize: 28, marginBottom: spacing.xl }}>
+                How do you feel today?
+              </Heading>
+            </View>
 
-              {/* Mood Options - Only 3 moods */}
-              <View style={{ flex: 1, justifyContent: 'center' }}>
-                <View style={{ 
-                  flexDirection: 'row', 
-                  flexWrap: 'wrap', 
-                  gap: 20, 
-                  justifyContent: 'center',
-                  marginBottom: 48
-                }}>
-                  {availableMoods.map((mood) => (
-                    <TouchableOpacity
-                      key={mood}
-                      onPress={() => handleMoodSelection(mood)}
-                      style={{
-                        backgroundColor: '#28232a',
-                        paddingHorizontal: 20,
-                        paddingVertical: 16,
-                        borderRadius: 16,
-                        alignItems: 'center',
-                        minWidth: 120,
-                        shadowColor: '#452451',
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.2,
-                        shadowRadius: 8,
-                        elevation: 4,
-                      }}
-                    >
-                      <Text style={{ fontSize: 28, marginBottom: 6 }}>
-                        {MOOD_EMOJIS[mood] || '🎵'}
-                      </Text>
-                      <Text style={{ 
-                        fontSize: 14, 
-                        fontFamily: fonts.chillax.regular, 
-                        color: '#ded7e0',
-                        textAlign: 'center'
-                      }}>
-                        {mood}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+            {/* Mood Buttons */}
+            <MoodButtons
+              availableMoods={availableMoods}
+              onMoodSelect={handleMoodSelection}
+              style={{ flex: 1, justifyContent: 'center' }}
+            />
 
-                {/* Surprise Me Button */}
-                <View style={{ alignItems: 'center' }}>
-                  <TouchableOpacity
-                    onPress={() => handleMoodSelection(null)}
-                    style={{
-                      backgroundColor: '#452451',
-                      paddingHorizontal: 28,
-                      paddingVertical: 16,
-                      borderRadius: 16,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 10,
-                      shadowColor: '#452451',
-                      shadowOffset: { width: 0, height: 6 },
-                      shadowOpacity: 0.4,
-                      shadowRadius: 12,
-                      elevation: 8,
-                    }}
-                  >
-                    <Shuffle size={20} color="#ded7e0" strokeWidth={2} />
-                    <Text style={{ 
-                      fontSize: 16, 
-                      fontFamily: fonts.chillax.bold, 
-                      color: '#ded7e0'
-                    }}>
-                      Surprise me
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </Animated.View>
-          </AnimationBackground>
-        </SafeAreaView>
-      </View>
+            {/* Surprise Me Button */}
+            <View style={{ alignItems: 'center', paddingBottom: spacing.xxl }}>
+              <Button
+                variant="primary"
+                size="large"
+                onPress={() => handleMoodSelection(null)}
+                icon={<Shuffle size={20} color={colors.text.primary} strokeWidth={2} />}
+                iconPosition="left"
+                style={{
+                  shadowColor: colors.primary,
+                  shadowOffset: { width: 0, height: 6 },
+                  shadowOpacity: 0.4,
+                  shadowRadius: 12,
+                  elevation: 8,
+                }}
+              >
+                Surprise me
+              </Button>
+            </View>
+          </View>
+        </AnimationBackground>
+      </Screen>
     );
   }
 
   if (isLoading) {
     return (
-      <View style={{ backgroundColor: '#19161a', flex: 1 }}>
-        <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ fontSize: 48, marginBottom: 32 }}>🎵</Text>
-          <ActivityIndicator size="large" color="#8b6699" />
-          <Text style={{ color: '#ded7e0', marginTop: 16, fontFamily: fonts.chillax.regular, fontSize: 18 }}>
-            Finding your perfect track...
-          </Text>
-          {selectedSessionMood && (
-            <Text style={{ color: '#8b6699', marginTop: 8, fontFamily: fonts.chillax.regular, fontSize: 16 }}>
-              {MOOD_EMOJIS[selectedSessionMood]} {selectedSessionMood} vibes
-            </Text>
-          )}
-        </SafeAreaView>
-      </View>
+      <Screen backgroundColor="#19161a" withoutBottomSafeArea>
+        <LoadingState
+          selectedMood={selectedSessionMood}
+        />
+      </Screen>
     );
   }
 
   if (error) {
     return (
-      <View style={{ backgroundColor: '#19161a', flex: 1 }}>
-        <SafeAreaView style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
-          <Text style={{ color: 'white', textAlign: 'center', marginBottom: 16, fontFamily: fonts.chillax.regular }}>{error}</Text>
-          <TouchableOpacity
-            onPress={() => loadNextTrack(false, selectedSessionMood)}
-            style={{ backgroundColor: '#452451', paddingHorizontal: 32, paddingVertical: 16, borderRadius: 16, marginBottom: 16 }}
-          >
-            <Text style={{ color: '#ded7e0', fontFamily: fonts.chillax.bold, fontSize: 18 }}>
-              Try Again
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleNewSession}
-            style={{ backgroundColor: '#28232a', paddingHorizontal: 32, paddingVertical: 16, borderRadius: 16 }}
-          >
-            <Text style={{ color: '#ded7e0', fontFamily: fonts.chillax.medium, fontSize: 16 }}>
-              Choose Different Mood
-            </Text>
-          </TouchableOpacity>
-        </SafeAreaView>
-      </View>
+      <Screen backgroundColor="#19161a" withoutBottomSafeArea>
+        <ErrorState
+          error={error}
+          onRetry={() => loadNextTrack(false, selectedSessionMood)}
+          onNewSession={handleNewSession}
+        />
+      </Screen>
     );
   }
 
   // Show artist unveil view when track is revealed
   if (trackRevealed && currentTrack) {
+    // Ensure artwork_url is provided for ArtistUnveilView
+    const trackWithRequiredArtwork: Track & { artwork_url: string } = {
+      ...currentTrack,
+      artwork_url: currentTrack.artwork_url || ''
+    };
+    
     return (
       <ArtistUnveilView
-        track={currentTrack}
+        track={trackWithRequiredArtwork}
         onContinueListening={handleContinueListening}
         onDiscoverNext={handleDiscoverNext}
         userRating={rating}
         userReview={review}
+        withoutBottomSafeArea
       />
     );
   }
 
   return (
     <TouchableWithoutFeedback onPress={dismissKeyboard}>
-      <View style={{ backgroundColor: '#19161a', flex: 1 }}>
-        <SafeAreaView style={{ flex: 1 }}>
-          <AnimationBackground>
-            {/* Header with Session Info - Same background as player */}
-            <View style={{ 
-              backgroundColor: '#19161a',
-              flexDirection: 'row', 
-              alignItems: 'center', 
-              justifyContent: 'space-between',
-              paddingHorizontal: 24, 
-              paddingTop: 24, 
-              paddingBottom: 16 
-            }}>
-              {/* Logo positioned at top left */}
-              <Text style={{ fontSize: 24, fontFamily: fonts.chillax.bold, color: '#ded7e0' }}>
-                unknown
-              </Text>
-              
-              {/* Mood session info positioned at top right */}
-              <TouchableOpacity
-                onPress={handleNewSession}
-                style={{ 
-                  backgroundColor: '#28232a', 
-                  paddingHorizontal: 16, 
-                  paddingVertical: 8, 
-                  borderRadius: 12,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-              >
-                {selectedSessionMood ? (
-                  <>
-                    <Text style={{ fontSize: 16 }}>
-                      {MOOD_EMOJIS[selectedSessionMood]}
-                    </Text>
-                    <Text style={{ fontSize: 14, fontFamily: fonts.chillax.medium, color: '#8b6699' }}>
-                      {selectedSessionMood}
-                    </Text>
-                  </>
-                ) : (
-                  <>
-                    <Gift size={16} color="#8b6699" strokeWidth={2} />
-                    <Text style={{ fontSize: 14, fontFamily: fonts.chillax.medium, color: '#8b6699' }}>
-                      surprise
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
+      <Screen backgroundColor="#19161a" withoutBottomSafeArea paddingHorizontal={0}>
+        <AnimationBackground>
+          <View style={{ paddingHorizontal: spacing.lg }}>
+            <SessionHeader
+              selectedMood={selectedSessionMood}
+              onNewSession={handleNewSession}
+            />
+          </View>
 
-            {/* Welcome Tip */}
-            {showWelcomeTip && (
-              <View style={{ backgroundColor: '#28232a', borderRadius: 16, padding: 16, marginHorizontal: 24, marginBottom: 24 }}>
-                <Text style={{ fontSize: 16, fontFamily: fonts.chillax.bold, color: '#ded7e0', marginBottom: 8 }}>
-                  Welcome to the Underground! 🎵
-                </Text>
-                <Text style={{ fontSize: 14, fontFamily: fonts.chillax.regular, color: '#8b6699' }}>
-                  Tap play to start discovering hidden gems. Rate tracks to reveal the artist and add them to your collection.
-                </Text>
-              </View>
-            )}
+          {showWelcomeTip && (
+            <WelcomeTip />
+          )}
 
-            {/* Thank You Overlay */}
-            {showThankYou && (
-              <Animated.View style={[
-                thankYouStyle,
-                {
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  backgroundColor: 'rgba(25, 22, 26, 0.95)',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  zIndex: 1000,
-                  paddingHorizontal: 24,
-                }
-              ]}>
-                <View style={{ alignItems: 'center' }}>
-                  <Text style={{ fontSize: 64, marginBottom: 32 }}>🙏</Text>
-                  <Text style={{ 
-                    fontSize: 32, 
-                    fontFamily: fonts.chillax.bold, 
-                    color: '#ded7e0', 
-                    textAlign: 'center',
-                    marginBottom: 20 
-                  }}>
-                    Thank you for your feedback!
-                  </Text>
-                  <Text style={{ 
-                    fontSize: 18, 
-                    fontFamily: fonts.chillax.regular, 
-                    color: '#8b6699', 
-                    textAlign: 'center',
-                    lineHeight: 28,
-                    maxWidth: 280
-                  }}>
-                    Your taste helps us discover better music for everyone
-                  </Text>
-                </View>
-              </Animated.View>
-            )}
+          <ThankYouOverlay
+            visible={showThankYou}
+          />
 
-            {/* Transition Overlay */}
-            {isTransitioning && (
-              <Animated.View style={[
-                transitionTextStyle,
-                {
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  backgroundColor: 'rgba(25, 22, 26, 0.95)',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  zIndex: 1000,
-                  paddingHorizontal: 24,
-                }
-              ]}>
-                <View style={{ alignItems: 'center' }}>
-                  <Text style={{ fontSize: 48, marginBottom: 32 }}>🎵</Text>
-                  <Text style={{ 
-                    fontSize: 24, 
-                    fontFamily: fonts.chillax.bold, 
-                    color: '#ded7e0', 
-                    textAlign: 'center',
-                    marginBottom: 16 
-                  }}>
-                    Finding your next discovery...
-                  </Text>
-                  <ActivityIndicator size="large" color="#8b6699" />
-                </View>
-              </Animated.View>
-            )}
+          <TransitionOverlay
+            visible={isTransitioning}
+          />
 
-            {/* Main Player Area */}
-            <Animated.View style={[fadeStyle, { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }]}>
+          {/* Main Player Area */}
+          <KeyboardAvoidingView 
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            <Animated.View style={[fadeStyle, { height: '100%', width: '100%', alignItems: 'center', paddingHorizontal: spacing.lg }]}>
               {state === 'full_listening' && currentTrack ? (
-                /* Full Listening Mode - Cover art with play button, track info below */
-                <>
-                  {/* Cover Art with Play Button */}
-                  <View style={{ alignItems: 'center', marginBottom: 32 }}>
-                    <View style={{ 
-                      width: 280, 
-                      height: 280, 
-                      borderRadius: 24, 
-                      overflow: 'hidden',
-                      position: 'relative',
-                      shadowColor: '#000',
-                      shadowOffset: { width: 0, height: 8 },
-                      shadowOpacity: 0.3,
-                      shadowRadius: 16,
-                      elevation: 8,
-                    }}>
-                      {currentTrack.artwork_url ? (
-                        <Image
-                          source={{ uri: currentTrack.artwork_url }}
-                          style={{ width: '100%', height: '100%' }}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View style={{ 
-                          width: '100%', 
-                          height: '100%', 
-                          backgroundColor: '#28232a', 
-                          alignItems: 'center', 
-                          justifyContent: 'center' 
-                        }}>
-                          <Text style={{ fontSize: 64 }}>🎵</Text>
-                        </View>
-                      )}
-                      
-                      {/* Play/Pause Button Overlay */}
-                      <TouchableOpacity
-                        onPress={playPauseAudio}
-                        style={{
-                          position: 'absolute',
-                          top: '50%',
-                          left: '50%',
-                          transform: [{ translateX: -30 }, { translateY: -30 }],
-                          width: 60,
-                          height: 60,
-                          borderRadius: 30,
-                          backgroundColor: 'rgba(69, 36, 81, 0.9)',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          shadowColor: '#000',
-                          shadowOffset: { width: 0, height: 4 },
-                          shadowOpacity: 0.3,
-                          shadowRadius: 8,
-                          elevation: 4,
-                        }}
-                      >
-                        {isPlaying ? (
-                          <Pause size={24} color="#ded7e0" strokeWidth={2} />
-                        ) : (
-                          <Play size={24} color="#ded7e0" strokeWidth={2} style={{ marginLeft: 2 }} />
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  {/* Track Info */}
-                  <View style={{ alignItems: 'center', marginBottom: 32 }}>
-                    <Text style={{ 
-                      color: '#ded7e0', 
-                      fontSize: 24, 
-                      fontFamily: fonts.chillax.bold, 
-                      textAlign: 'center',
-                      marginBottom: 8 
-                    }}>
-                      {currentTrack.title}
-                    </Text>
-                    <Text style={{ 
-                      color: '#8b6699', 
-                      fontSize: 18, 
-                      fontFamily: fonts.chillax.regular, 
-                      textAlign: 'center' 
-                    }}>
-                      {currentTrack.artist}
-                    </Text>
-                  </View>
-
-                  {/* Progress Bar */}
-                  <View style={{ width: '100%', maxWidth: 320, height: 4, backgroundColor: '#28232a', borderRadius: 2, marginBottom: 32 }}>
-                    <Animated.View
-                      style={[progressStyle, { height: '100%', backgroundColor: '#452451', borderRadius: 2 }]}
-                    />
-                  </View>
-
-                  {/* Next Button */}
-                  <TouchableOpacity
-                    onPress={skipTrack}
-                    style={{ 
-                      flexDirection: 'row', 
-                      alignItems: 'center', 
-                      gap: 8, 
-                      paddingHorizontal: 24,
-                      paddingVertical: 16,
-                      backgroundColor: '#28232a',
-                      borderRadius: 16,
-                      marginBottom: 32,
-                    }}
-                  >
-                    <SkipForward size={20} color='#8b6699' strokeWidth={2} />
-                    <Text style={{ fontFamily: fonts.chillax.medium, color: '#8b6699', fontSize: 16 }}>Next</Text>
-                  </TouchableOpacity>
-
-                  {/* Rating Display - Full width */}
-                  <View style={{ 
-                    width: '100%', 
-                    backgroundColor: 'rgba(222, 215, 224, 0.1)', 
-                    borderRadius: 16, 
-                    padding: 16,
-                    alignItems: 'flex-start'
-                  }}>
-                    <Text style={{ 
-                      fontSize: 16, 
-                      fontFamily: fonts.chillax.medium, 
-                      color: '#ded7e0', 
-                      marginBottom: 8 
-                    }}>
-                      Your Rating
-                    </Text>
-                    <View style={{ flexDirection: 'row', gap: 4, marginBottom: 12 }}>
-                      {Array.from({ length: 5 }, (_, i) => (
-                        <Text key={i} style={{ color: i < rating ? '#ded7e0' : '#8b6699', fontSize: 18 }}>
-                          ★
-                        </Text>
-                      ))}
-                    </View>
-                    {review && (
-                      <View style={{ flexDirection: 'row', alignItems: 'flex-start', maxWidth: '100%' }}>
-                        <Text style={{ fontSize: 28, fontFamily: fonts.chillax.bold, color: '#452451', lineHeight: 24 }}>"</Text>
-                        <Text style={{ 
-                          fontSize: 18, 
-                          fontFamily: fonts.chillax.regular, 
-                          color: '#8b6699', 
-                          fontStyle: 'italic',
-                          flex: 1,
-                          marginHorizontal: 8,
-                          lineHeight: 26
-                        }}>
-                          {review}
-                        </Text>
-                        <Text style={{ fontSize: 28, fontFamily: fonts.chillax.bold, color: '#452451', lineHeight: 24 }}>"</Text>
-                      </View>
-                    )}
-                  </View>
-                </>
+                <FullListeningMode
+                  track={currentTrack}
+                  isPlaying={isPlaying}
+                  onPlayPause={playPauseAudio}
+                  position={position}
+                  duration={duration}
+                  userRating={rating}
+                  userReview={review}
+                  onSkip={skipTrack}
+                />
               ) : !showRating ? (
-                <>
-                  {/* Play Button */}
-                  <Animated.View style={[pulseStyle, { marginBottom: 40 }]}>
-                    <TouchableOpacity
-                      onPress={playPauseAudio}
-                      style={{
-                        width: 120,
-                        height: 120,
-                        borderRadius: 60,
-                        backgroundColor: '#452451',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        shadowColor: '#452451',
-                        shadowOffset: { width: 0, height: 8 },
-                        shadowOpacity: 0.3,
-                        shadowRadius: 16,
-                        elevation: 8,
-                      }}
-                    >
-                      {isPlaying ? (
-                        <Pause size={40} color="#ded7e0" strokeWidth={2} />
-                      ) : (
-                        <Play size={40} color="#ded7e0" strokeWidth={2} style={{ marginLeft: 4 }} />
-                      )}
-                    </TouchableOpacity>
-                  </Animated.View>
-
-                  {/* Progress Bar */}
-                  <View style={{ width: '100%', maxWidth: 320, height: 4, backgroundColor: '#28232a', borderRadius: 2, marginBottom: 40 }}>
-                    <Animated.View
-                      style={[progressStyle, { height: '100%', backgroundColor: '#452451', borderRadius: 2 }]}
-                    />
-                  </View>
-
-                  {/* Next Button - only show when not rating */}
-                  {canSkip && (
-                    <TouchableOpacity
-                      onPress={skipTrack}
-                      style={{ 
-                        flexDirection: 'row', 
-                        alignItems: 'center', 
-                        gap: 8, 
-                        paddingHorizontal: 24,
-                        paddingVertical: 16,
-                        backgroundColor: '#28232a',
-                        borderRadius: 16,
-                      }}
-                    >
-                      <SkipForward size={20} color='#8b6699' strokeWidth={2} />
-                      <Text style={{ fontFamily: fonts.chillax.medium, color: '#8b6699', fontSize: 16 }}>Next</Text>
-                    </TouchableOpacity>
-                  )}
-                </>
+                <PlaybackControls
+                  isPlaying={isPlaying}
+                  onPlayPause={playPauseAudio}
+                  position={position}
+                  duration={duration}
+                  canSkip={canSkip}
+                  onSkip={skipTrack}
+                />
               ) : (
-                /* Rating Interface - Full width */
-                <Animated.View style={[ratingContainerStyle, { alignItems: 'center', width: '100%' }]}>
-                  <Text style={{ fontSize: 18, fontFamily: fonts.chillax.medium, textAlign: 'center', marginBottom: 32, color: '#ded7e0' }}>
-                    How does this track make you feel?
-                  </Text>
-
-                  {/* Rating Stars with Individual Animated Styles - Full width */}
-                  <View style={{ 
-                    flexDirection: 'row', 
-                    justifyContent: 'space-between', 
-                    width: '100%', 
-                    paddingHorizontal: 24,
-                    marginBottom: 24 
-                  }}>
-                    <Animated.View style={star1Style}>
-                      <TouchableOpacity
-                        onPress={() => handleStarPress(1)}
-                        style={{ padding: 6 }}
-                      >
-                        <Star
-                          size={28}
-                          color={1 <= rating ? '#ded7e0' : '#8b6699'}
-                          fill={1 <= rating ? '#ded7e0' : 'transparent'}
-                          strokeWidth={1.5}
-                        />
-                      </TouchableOpacity>
-                    </Animated.View>
-
-                    <Animated.View style={star2Style}>
-                      <TouchableOpacity
-                        onPress={() => handleStarPress(2)}
-                        style={{ padding: 6 }}
-                      >
-                        <Star
-                          size={28}
-                          color={2 <= rating ? '#ded7e0' : '#8b6699'}
-                          fill={2 <= rating ? '#ded7e0' : 'transparent'}
-                          strokeWidth={1.5}
-                        />
-                      </TouchableOpacity>
-                    </Animated.View>
-
-                    <Animated.View style={star3Style}>
-                      <TouchableOpacity
-                        onPress={() => handleStarPress(3)}
-                        style={{ padding: 6 }}
-                      >
-                        <Star
-                          size={28}
-                          color={3 <= rating ? '#ded7e0' : '#8b6699'}
-                          fill={3 <= rating ? '#ded7e0' : 'transparent'}
-                          strokeWidth={1.5}
-                        />
-                      </TouchableOpacity>
-                    </Animated.View>
-
-                    <Animated.View style={star4Style}>
-                      <TouchableOpacity
-                        onPress={() => handleStarPress(4)}
-                        style={{ padding: 6 }}
-                      >
-                        <Star
-                          size={28}
-                          color={4 <= rating ? '#ded7e0' : '#8b6699'}
-                          fill={4 <= rating ? '#ded7e0' : 'transparent'}
-                          strokeWidth={1.5}
-                        />
-                      </TouchableOpacity>
-                    </Animated.View>
-
-                    <Animated.View style={star5Style}>
-                      <TouchableOpacity
-                        onPress={() => handleStarPress(5)}
-                        style={{ padding: 6 }}
-                      >
-                        <Star
-                          size={28}
-                          color={5 <= rating ? '#ded7e0' : '#8b6699'}
-                          fill={5 <= rating ? '#ded7e0' : 'transparent'}
-                          strokeWidth={1.5}
-                        />
-                      </TouchableOpacity>
-                    </Animated.View>
-                  </View>
-
-                  {/* Review Input for High Ratings */}
-                  {showReviewInput && (
-                    <Animated.View style={[reviewInputContainerStyle, { width: '100%', overflow: 'hidden' }]}>
-                      <Animated.View style={[reviewInputStyle, { width: '100%', marginBottom: 20 }]}>
-                        <Text style={{ fontSize: 16, fontFamily: fonts.chillax.medium, color: '#ded7e0', marginBottom: 10 }}>
-                          Share your thoughts (optional)
-                        </Text>
-                        <View style={{ backgroundColor: '#28232a', borderRadius: 16, padding: 14 }}>
-                          <TextInput
-                            ref={reviewInputRef}
-                            style={{ 
-                              fontSize: 16, 
-                              fontFamily: fonts.chillax.regular, 
-                              color: '#ded7e0',
-                              minHeight: 70,
-                              textAlignVertical: 'top'
-                            }}
-                            placeholder="What did you love about this track?"
-                            placeholderTextColor="#8b6699"
-                            value={review}
-                            onChangeText={setReview}
-                            multiline
-                            onFocus={() => setIsReviewFocused(true)}
-                            onBlur={() => setIsReviewFocused(false)}
-                          />
-                        </View>
-                        
-                        <TouchableOpacity
-                          onPress={handleSubmitWithReview}
-                          style={{ backgroundColor: '#452451', paddingVertical: 14, borderRadius: 16, alignItems: 'center', marginTop: 12 }}
-                        >
-                          <Text style={{ color: '#ded7e0', fontFamily: fonts.chillax.bold, fontSize: 16 }}>
-                            Submit Rating
-                          </Text>
-                        </TouchableOpacity>
-                      </Animated.View>
-                    </Animated.View>
-                  )}
-                </Animated.View>
+                <RatingInterface
+                  onStarPress={handleStarPress}
+                  rating={rating}
+                  showReviewInput={showReviewInput}
+                  review={review}
+                  onReviewChange={setReview}
+                  onSubmitWithReview={handleSubmitWithReview}
+                  isReviewFocused={isReviewFocused}
+                  setIsReviewFocused={setIsReviewFocused}
+                  reviewInputRef={reviewInputRef}
+                />
               )}
             </Animated.View>
-          </AnimationBackground>
-        </SafeAreaView>
-      </View>
+          </KeyboardAvoidingView>
+        </AnimationBackground>
+      </Screen>
     </TouchableWithoutFeedback>
   );
 }

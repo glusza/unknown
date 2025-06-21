@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { AuthService, AuthUser } from '@/lib/auth';
+import { AuthService } from '@/lib/auth';
+import { AuthUser } from '@/types';
 
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<{ success: boolean; error: any | null }>;
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateProfile: (updates: any) => Promise<void>;
@@ -34,7 +35,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    await AuthService.signIn(email, password);
+    const result = await AuthService.signIn(email, password);
+    
+    if (result.user) {
+      // Get the full user data including profile
+      const authUser = await AuthService.getCurrentUser();
+      setUser(authUser);
+      return { success: true, error: null };
+    }
+    
+    return { success: false, error: result.error };
   };
 
   const signUp = async (email: string, password: string) => {

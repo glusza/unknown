@@ -1,20 +1,5 @@
 import { supabase } from './supabase';
-
-export interface Profile {
-  id: string;
-  email: string | null;
-  username: string | null;
-  display_name: string | null;
-  onboarding_complete: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface AuthUser {
-  id: string;
-  email: string;
-  profile: Profile | null;
-}
+import { Profile, AuthUser } from '@/types';
 
 export class AuthService {
   static async signUp(email: string, password: string) {
@@ -28,13 +13,20 @@ export class AuthService {
   }
 
   static async signIn(email: string, password: string) {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (error) throw error;
-    return data;
+      if (error) {
+        return { user: null, error };
+      }
+
+      return { user: data.user, error: null };
+    } catch (error) {
+      return { user: null, error };
+    }
   }
 
   static async signOut() {
@@ -43,8 +35,16 @@ export class AuthService {
   }
 
   static async getCurrentUser(): Promise<AuthUser | null> {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
     
+    // If there's an authentication error (like invalid refresh token), clear the session
+    if (authError) {
+      console.warn('Authentication error detected, clearing session:', authError.message);
+      // Clear the invalid session silently
+      await supabase.auth.signOut();
+      return null;
+    }
+
     if (!user) return null;
 
     // Get user profile

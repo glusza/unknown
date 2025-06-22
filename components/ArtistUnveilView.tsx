@@ -271,8 +271,8 @@ export default function ArtistUnveilView({
               {track.artist && track.artist.trim() ? track.artist : 'Unknown Artist'}
             </Text>
             <View style={styles.genreMoodContainer}>
-              <Text style={styles.genreTag}>{track.genre && track.genre.trim() ? track.genre : 'Unknown Genre'}</Text>
-              <Text style={styles.moodTag}>{track.mood && track.mood.trim() ? track.mood : 'Unknown Mood'}</Text>
+              <Text style={styles.tag}>{track.genre && track.genre.trim() ? track.genre : 'Unknown Genre'}</Text>
+              <Text style={styles.tag}>{track.mood && track.mood.trim() ? track.mood : 'Unknown Mood'}</Text>
             </View>
           </View>
 
@@ -369,8 +369,8 @@ export default function ArtistUnveilView({
                 
                 {/* Follow Button */}
                 <Button
-                  variant={isSubscribed ? "outline" : "primary"}
-                  size="large"
+                  variant={isSubscribed ? "success" : "primary"}
+                  size="medium"
                   onPress={handleSubscribeToArtist}
                   icon={isSubscribed ? 
                     <HeartHandshake size={20} color={colors.text.primary} strokeWidth={2} /> :
@@ -428,7 +428,7 @@ export default function ArtistUnveilView({
                     {artist.genres && artist.genres.length > 0 && artist.genres.some(genre => genre && genre.trim()) && (
                       <View style={styles.genresContainer}>
                         {artist.genres.filter(genre => genre && genre.trim()).map((genre) => (
-                          <Text key={genre} style={styles.artistGenreTag}>
+                          <Text key={genre} style={styles.tag}>
                             {genre.trim()}
                           </Text>
                         ))}
@@ -453,7 +453,7 @@ export default function ArtistUnveilView({
                 {onContinueListening && (
                   <Button
                     variant="primary"
-                    size="large"
+                    size="medium"
                     onPress={onContinueListening}
                     icon={<Play size={20} color={colors.text.primary} strokeWidth={2} />}
                     iconPosition="left"
@@ -466,7 +466,7 @@ export default function ArtistUnveilView({
                 {onDiscoverNext && (
                   <Button
                     variant="secondary"
-                    size="large"
+                    size="medium"
                     onPress={onDiscoverNext}
                     icon={<SkipForward size={20} color={colors.text.primary} strokeWidth={2} />}
                     iconPosition="left"
@@ -523,7 +523,6 @@ export default function ArtistUnveilView({
                   >
                     {getPlatformName(link.platform) || link.platform}
                   </Text>
-                  <ExternalLink size={16} color={getPlatformColor(link.platform)} strokeWidth={2} />
                 </Button>
               ))}
             </View>
@@ -545,7 +544,8 @@ const styles = StyleSheet.create({
   },
   artworkContainer: {
     alignItems: 'center',
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.md,
+    paddingTop: spacing.md,
   },
   artworkWrapper: {
     width: 280,
@@ -585,21 +585,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
   },
-  genreTag: {
-    fontSize: 14,
+  tag: {
+    fontSize: 12,
     color: colors.text.primary,
-    backgroundColor: 'rgba(222, 215, 224, 0.15)',
+    backgroundColor: colors.surface,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    borderRadius: borderRadius.md,
-  },
-  moodTag: {
-    fontSize: 14,
-    color: colors.text.primary,
-    backgroundColor: 'rgba(222, 215, 224, 0.15)',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.sm,
   },
   section: {
     marginBottom: spacing.xl,
@@ -620,7 +612,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   userRatingStars: {
-    marginBottom: spacing.sm,
   },
   artisticQuoteContainer: {
     flexDirection: 'row',
@@ -640,14 +631,14 @@ const styles = StyleSheet.create({
     lineHeight: 26,
   },
   streamingLinksContainer: {
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   playInAppButton: {
     marginBottom: spacing.sm,
   },
   streamingButtonsRow: {
     flexDirection: 'row',
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
   preferredStreamingButton: {
     backgroundColor: colors.surface,
@@ -663,7 +654,7 @@ const styles = StyleSheet.create({
   },
   socialLinksContainer: {
     flexDirection: 'row',
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
   socialButton: {
     backgroundColor: colors.surface,
@@ -676,7 +667,7 @@ const styles = StyleSheet.create({
   artistDetailsContainer: {
     flexDirection: 'row',
     marginBottom: spacing.md,
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   artistAvatarContainer: {
     width: 80,
@@ -706,20 +697,12 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  artistGenreTag: {
-    fontSize: 12,
-    color: colors.text.primary,
-    backgroundColor: 'rgba(222, 215, 224, 0.15)',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.sm,
-  },
   artistBio: {
     fontSize: 16,
     lineHeight: 24,
   },
   playbackControls: {
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   playbackButton: {
     marginBottom: spacing.sm,
@@ -732,7 +715,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   modalContent: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.background,
     borderRadius: 20,
     padding: spacing.lg,
     width: '100%',
@@ -751,7 +734,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   modalPlatformButton: {
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
     justifyContent: 'space-between',
   },
   modalPlatformButtonText: {

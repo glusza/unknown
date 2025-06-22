@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Alert, TextInput, Keyboard, TouchableWithoutFeedback, Platform, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Shuffle } from 'lucide-react-native';
 import Animated, { 
   useAnimatedStyle, 
@@ -16,17 +17,18 @@ import Animated, {
   FadeIn,
   FadeOut,
 } from 'react-native-reanimated';
-import { Audio, AVPlaybackStatus } from 'expo-av';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAudio } from '@/contexts/AudioContext';
 import { colors } from '@/utils/colors';
 import { spacing } from '@/utils/spacing';
+import { useAudioPlayerPadding } from '@/hooks/useAudioPlayerPadding';
 import { Button } from '@/components/buttons';
 import { Heading } from '@/components/typography';
 import { Text } from '@/components/typography/Text';
 import { Logo } from '@/components/typography/Logo';
 import ArtistUnveilView from '@/components/ArtistUnveilView';
-import { Track, UserPreferences, DiscoverState, AnimationBackgroundProps } from '@/types';
+import { Track, UserPreferences, DiscoverState, AnimationBackgroundProps, GamificationReward } from '@/types';
 import {
   MoodSelector,
   LoadingState,
@@ -40,6 +42,7 @@ import {
   ErrorState,
   NoTracksInPreferencesState,
   NoTracksAtAllState,
+  GamificationRewardDisplay,
 } from '@/components/discover';
 import { getMoodsForSession } from '@/utils/music';
 import { type Mood } from '@/utils/constants';
@@ -70,32 +73,21 @@ function AnimationBackground({ animationUrl, children }: AnimationBackgroundProp
   );
 }
 
-// Helper function to check if audio URL is web-compatible
-const isWebCompatibleAudio = (url: string): boolean => {
-  if (Platform.OS !== 'web') return true;
-  
-  const webCompatibleFormats = ['.mp3', '.wav', '.ogg', '.m4a', '.aac'];
-  const urlLower = url.toLowerCase();
-  return webCompatibleFormats.some(format => urlLower.includes(format));
-};
-
-// Helper function to get a fallback audio URL for web
-const getWebCompatibleAudioUrl = (originalUrl: string): string => {
-  if (Platform.OS !== 'web') return originalUrl;
-  
-  // If the original URL is already web-compatible, return it
-  if (isWebCompatibleAudio(originalUrl)) {
-    return originalUrl;
-  }
-  
-  // For demo purposes, return a placeholder web-compatible audio file
-  // In production, you would convert/serve the audio in a web-compatible format
-  return 'https://www.soundjay.com/misc/sounds/bell-ringing-05.wav';
-};
-
 export default function DiscoverScreen() {
   // All hooks must be called at the top level in the same order every time
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
+  const { 
+    currentTrack: globalCurrentTrack, 
+    isPlaying, 
+    position, 
+    duration, 
+    loadTrack, 
+    playPause, 
+    stop, 
+    error: audioError,
+    unveilTrack
+  } = useAudio();
+  const { paddingBottom } = useAudioPlayerPadding();
   
   // State hooks - always called in the same order
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
@@ -108,14 +100,10 @@ export default function DiscoverScreen() {
   const [trackRevealed, setTrackRevealed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [position, setPosition] = useState(0);
-  const [duration, setDuration] = useState(0);
   const [showWelcomeTip, setShowWelcomeTip] = useState(false);
   const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
   const [showThankYou, setShowThankYou] = useState(false);
-  const [ratingThreshold] = useState(0.01); // 80% of track length
+  const [ratingThreshold] = useState(0.05); // 5% of track length
   const [canSkip, setCanSkip] = useState(true);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showReviewInput, setShowReviewInput] = useState(false);
@@ -123,10 +111,14 @@ export default function DiscoverScreen() {
   const [totalTracksRated, setTotalTracksRated] = useState(0);
   // Track if we're in broadened search mode (Surprise me or broadened search)
   const [isBroadenedSearch, setIsBroadenedSearch] = useState(false);
+  const [ratedTrackIds, setRatedTrackIds] = useState<string[]>([]);
+  
+  // Gamification state
+  const [gamificationReward, setGamificationReward] = useState<GamificationReward | null>(null);
+  const [showGamificationReward, setShowGamificationReward] = useState(false);
 
   // Ref hooks - always called in the same order
   const reviewInputRef = useRef<TextInput>(null);
-  const autoPlayTriggeredRef = useRef(false);
 
   // Animation shared values - always called in the same order
   const pulseAnimation = useSharedValue(1);
@@ -146,185 +138,11 @@ export default function DiscoverScreen() {
   const moodSelectionOpacity = useSharedValue(1);
   const moodSelectionScale = useSharedValue(1);
 
-  // Animated styles - always called in the same order
-  const pulseStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: pulseAnimation.value }],
-  }));
-
-  const progressStyle = useAnimatedStyle(() => ({
-    width: `${(position / duration) * 100}%`,
-  }));
-
-  const thankYouStyle = useAnimatedStyle(() => ({
-    opacity: thankYouOpacity.value,
-  }));
-
   const fadeStyle = useAnimatedStyle(() => ({
     opacity: fadeOpacity.value,
   }));
 
-  const transitionTextStyle = useAnimatedStyle(() => ({
-    opacity: transitionTextOpacity.value,
-  }));
-
-  const ratingContainerStyle = useAnimatedStyle(() => ({
-    opacity: ratingContainerOpacity.value,
-    transform: [{ scale: ratingContainerScale.value }],
-  }));
-
-  const star1Style = useAnimatedStyle(() => ({
-    opacity: star1Animation.value,
-    transform: [
-      { 
-        scale: interpolate(
-          star1Animation.value,
-          [0, 1],
-          [0.3, 1],
-          Extrapolate.CLAMP
-        )
-      },
-      {
-        translateY: interpolate(
-          star1Animation.value,
-          [0, 1],
-          [20, 0],
-          Extrapolate.CLAMP
-        )
-      }
-    ],
-  }));
-
-  const star2Style = useAnimatedStyle(() => ({
-    opacity: star2Animation.value,
-    transform: [
-      { 
-        scale: interpolate(
-          star2Animation.value,
-          [0, 1],
-          [0.3, 1],
-          Extrapolate.CLAMP
-        )
-      },
-      {
-        translateY: interpolate(
-          star2Animation.value,
-          [0, 1],
-          [20, 0],
-          Extrapolate.CLAMP
-        )
-      }
-    ],
-  }));
-
-  const star3Style = useAnimatedStyle(() => ({
-    opacity: star3Animation.value,
-    transform: [
-      { 
-        scale: interpolate(
-          star3Animation.value,
-          [0, 1],
-          [0.3, 1],
-          Extrapolate.CLAMP
-        )
-      },
-      {
-        translateY: interpolate(
-          star3Animation.value,
-          [0, 1],
-          [20, 0],
-          Extrapolate.CLAMP
-        )
-      }
-    ],
-  }));
-
-  const star4Style = useAnimatedStyle(() => ({
-    opacity: star4Animation.value,
-    transform: [
-      { 
-        scale: interpolate(
-          star4Animation.value,
-          [0, 1],
-          [0.3, 1],
-          Extrapolate.CLAMP
-        )
-      },
-      {
-        translateY: interpolate(
-          star4Animation.value,
-          [0, 1],
-          [20, 0],
-          Extrapolate.CLAMP
-        )
-      }
-    ],
-  }));
-
-  const star5Style = useAnimatedStyle(() => ({
-    opacity: star5Animation.value,
-    transform: [
-      { 
-        scale: interpolate(
-          star5Animation.value,
-          [0, 1],
-          [0.3, 1],
-          Extrapolate.CLAMP
-        )
-      },
-      {
-        translateY: interpolate(
-          star5Animation.value,
-          [0, 1],
-          [20, 0],
-          Extrapolate.CLAMP
-        )
-      }
-    ],
-  }));
-
-  const reviewInputStyle = useAnimatedStyle(() => ({
-    opacity: reviewInputAnimation.value,
-    transform: [
-      {
-        translateY: interpolate(
-          reviewInputAnimation.value,
-          [0, 1],
-          [30, 0],
-          Extrapolate.CLAMP
-        )
-      }
-    ],
-  }));
-
-  const reviewInputContainerStyle = useAnimatedStyle(() => ({
-    maxHeight: interpolate(
-      reviewInputHeight.value,
-      [0, 1],
-      [0, 200],
-      Extrapolate.CLAMP
-    ),
-  }));
-
-  const moodSelectionStyle = useAnimatedStyle(() => ({
-    opacity: moodSelectionOpacity.value,
-    transform: [{ scale: moodSelectionScale.value }],
-  }));
-
   // Effect hooks - always called in the same order
-  useEffect(() => {
-    if (user?.id) {
-      loadUserPreferences();
-      checkFirstTimeUser();
-      loadUserStats();
-    }
-
-    return () => {
-      if (sound) {
-        sound.unloadAsync();
-      }
-    };
-  }, [user]);
-
   useEffect(() => {
     if (isPlaying) {
       pulseAnimation.value = withRepeat(
@@ -339,30 +157,6 @@ export default function DiscoverScreen() {
     }
   }, [isPlaying]);
 
-  // Monitor playback progress for rating trigger
-  useEffect(() => {
-    if (duration > 0 && position > 0 && state === 'playing') {
-      const progress = position / duration;
-      if (progress >= ratingThreshold) {
-        setState('rating');
-        setShowRating(true);
-        // Trigger rating animations
-        animateRatingAppearance();
-      }
-    }
-  }, [position, duration, ratingThreshold, state]);
-
-  // Auto-play effect when track is loaded and state is playing
-  useEffect(() => {
-    if (currentTrack && state === 'playing' && !autoPlayTriggeredRef.current) {
-      autoPlayTriggeredRef.current = true;
-      // Small delay to ensure the track is properly loaded
-      setTimeout(() => {
-        playPauseAudio();
-      }, 500);
-    }
-  }, [currentTrack, state]);
-
   // Function definitions
   const animateRatingAppearance = () => {
     // Container animation - faster
@@ -376,6 +170,19 @@ export default function DiscoverScreen() {
     star4Animation.value = withDelay(250, withTiming(1, { duration: 200 }));
     star5Animation.value = withDelay(300, withTiming(1, { duration: 200 }));
   };
+
+  // Monitor playback progress for rating trigger
+  useEffect(() => {
+    if (duration > 0 && position > 0 && state === 'playing') {
+      const progress = position / duration;
+      if (progress >= ratingThreshold) {
+        setState('rating');
+        setShowRating(true);
+        // Trigger rating animations
+        animateRatingAppearance();
+      }
+    }
+  }, [position, duration, ratingThreshold, state]);
 
   const animateReviewInput = () => {
     reviewInputAnimation.value = withTiming(1, { duration: 250 });
@@ -392,6 +199,36 @@ export default function DiscoverScreen() {
     star5Animation.value = 0;
     reviewInputAnimation.value = 0;
     reviewInputHeight.value = 0;
+  };
+
+  const loadUserData = async () => {
+    if (!user?.id) return;
+
+    try {
+      // Single query to get all user ratings data
+      const { data: ratings, error } = await supabase
+        .from('user_ratings')
+        .select('id, track_id')
+        .eq('profile_id', user.id);
+
+      if (error) throw error;
+
+      // Use the same data for all three purposes
+      const totalTracksRated = ratings?.length || 0;
+      const isFirstTimeUser = totalTracksRated === 0;
+      const ratedTrackIds = ratings?.map(r => r.track_id) || [];
+
+      // Update state
+      setTotalTracksRated(totalTracksRated);
+      if (isFirstTimeUser) {
+        setShowWelcomeTip(true);
+      }
+
+      // Store rated track IDs for use in loadNextTrack
+      setRatedTrackIds(ratedTrackIds);
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    }
   };
 
   const loadUserPreferences = async () => {
@@ -426,42 +263,13 @@ export default function DiscoverScreen() {
     }
   };
 
-  const loadUserStats = async () => {
-    if (!user?.id) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('user_ratings')
-        .select('id')
-        .eq('profile_id', user.id);
-
-      if (error) throw error;
-
-      setTotalTracksRated(data?.length || 0);
-    } catch (error) {
-      console.error('Error loading user stats:', error);
+  // Load user data when user changes
+  useEffect(() => {
+    if (user?.id) {
+      loadUserData();
+      loadUserPreferences();
     }
-  };
-
-  const checkFirstTimeUser = async () => {
-    if (!user?.id) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('user_ratings')
-        .select('id')
-        .eq('profile_id', user.id)
-        .limit(1);
-
-      if (error) throw error;
-
-      if (!data || data.length === 0) {
-        setShowWelcomeTip(true);
-      }
-    } catch (error) {
-      console.error('Error checking first time user:', error);
-    }
-  };
+  }, [user]);
 
   const handleMoodSelection = async (mood: string | null) => {
     setSelectedSessionMood(mood);
@@ -485,33 +293,16 @@ export default function DiscoverScreen() {
     }, 200);
   };
 
-  const loadNextTrack = async (isBackgroundLoad = false, sessionMood: string | null = null, broadenSearch = false) => {
+  const loadNextTrack = async (isBackgroundLoad = false, sessionMood: string | null = null, broadenSearch = false, autoPlay = true) => {
     try {
       if (!isBackgroundLoad && state !== 'no_tracks_in_preferences' && state !== 'no_tracks_at_all') {
         setIsLoading(true);
         setError(null);
         setState('loading');
       }
-      
-      if (sound) {
-        await sound.unloadAsync();
-        setSound(null);
-      }
 
-      // Reset auto-play trigger
-      autoPlayTriggeredRef.current = false;
-
-      // Get tracks that user hasn't rated yet
-      const { data: ratedTrackIds, error: ratedError } = await supabase
-        .from('user_ratings')
-        .select('track_id')
-        .eq('profile_id', user?.id || '');
-
-      if (ratedError && ratedError.code !== 'PGRST116') {
-        throw ratedError;
-      }
-
-      const excludeIds = ratedTrackIds?.map(r => r.track_id) || [];
+      // Use stored rated track IDs instead of making another query
+      const excludeIds = ratedTrackIds || [];
 
       // Build query based on user preferences and session mood
       let query = supabase
@@ -577,7 +368,7 @@ export default function DiscoverScreen() {
             return;
           }
         } else {
-          // Even broadened search found nothing
+          // Even broadened search found no tracks
           setState('no_tracks_at_all');
           setIsLoading(false);
           return;
@@ -587,14 +378,14 @@ export default function DiscoverScreen() {
       const randomTrack = tracks[Math.floor(Math.random() * tracks.length)];
       setCurrentTrack(randomTrack);
 
+      // Load track into global audio context
+      await loadTrack(randomTrack, autoPlay);
+
       // Reset UI state
       setRating(0);
       setReview('');
       setShowRating(false);
       setTrackRevealed(false);
-      setIsPlaying(false);
-      setPosition(0);
-      setDuration(0);
       setShowWelcomeTip(false);
       setCanSkip(true);
       setShowReviewInput(false);
@@ -608,10 +399,6 @@ export default function DiscoverScreen() {
       moodSelectionOpacity.value = 1;
       moodSelectionScale.value = 1;
 
-      if (!isBackgroundLoad) {
-        setShowThankYou(false);
-      }
-
     } catch (error) {
       console.error('Error loading track:', error);
       setError('Failed to load track. Please try again.');
@@ -622,22 +409,8 @@ export default function DiscoverScreen() {
     }
   };
 
-  const loadNextTrackInBackground = async () => {
-    // Maintain the current broadened search state when loading next track
-    await loadNextTrack(true, selectedSessionMood, isBroadenedSearch);
-  };
-
-  const fadeAudioAndTransition = async (callback: () => void) => {
+  const fadeAudioAndTransition = useCallback(async (callback: () => void) => {
     setIsTransitioning(true);
-    
-    // Fade out audio volume over 0.2 seconds
-    if (sound) {
-      try {
-        await sound.setVolumeAsync(0);
-      } catch (error) {
-        console.error('Error fading audio:', error);
-      }
-    }
     
     // Fade out current content
     fadeOpacity.value = withTiming(0, { duration: 300 });
@@ -656,13 +429,18 @@ export default function DiscoverScreen() {
         setIsTransitioning(false);
       }, 1000);
     }, 2000);
-  };
+  }, [fadeOpacity, transitionTextOpacity]);
 
   const showThankYouMessage = () => {
     setShowThankYou(true);
     thankYouOpacity.value = withTiming(1, { duration: 300 });
     
-    loadNextTrackInBackground();
+    // Immediately reset UI state to hide rating interface
+    setShowRating(false);
+    setRating(0);
+    setReview('');
+    setShowReviewInput(false);
+    setIsReviewFocused(false);
     
     setTimeout(() => {
       thankYouOpacity.value = withTiming(0, { duration: 300 }, () => {
@@ -671,75 +449,8 @@ export default function DiscoverScreen() {
     }, 3000);
   };
 
-  const playPauseAudio = async () => {
-    try {
-      if (!currentTrack?.audio_url) {
-        throw new Error('No audio URL available');
-      }
-
-      // Get web-compatible audio URL
-      const audioUrl = getWebCompatibleAudioUrl(currentTrack.audio_url);
-
-      if (sound) {
-        const status = await sound.getStatusAsync();
-        if (status.isLoaded) {
-          if (isPlaying) {
-            // Fade out volume over 0.2 seconds when pausing
-            await sound.setVolumeAsync(0);
-            await sound.pauseAsync();
-            setIsPlaying(false);
-          } else {
-            // Restore volume and play
-            await sound.setVolumeAsync(1);
-            await sound.playAsync();
-            setIsPlaying(true);
-          }
-        }
-      } else {
-        // Check if the audio URL is web-compatible before attempting to load
-        if (Platform.OS === 'web' && !isWebCompatibleAudio(currentTrack.audio_url)) {
-          console.warn('Audio file may not be web-compatible:', currentTrack.audio_url);
-          setError('Audio format not supported in web browser. Please use MP3, WAV, or OGG format.');
-          return;
-        }
-
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: audioUrl },
-          { shouldPlay: true },
-          onPlaybackStatusUpdate
-        );
-        setSound(newSound);
-        setIsPlaying(true);
-      }
-    } catch (error) {
-      console.error('Error playing audio:', error);
-      
-      // Provide more specific error messages for web
-      if (Platform.OS === 'web') {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        if (errorMessage.includes('no supported source')) {
-          setError('Audio format not supported in web browser. Please ensure the audio file is in MP3, WAV, or OGG format and served with proper CORS headers.');
-        } else if (errorMessage.includes('CORS')) {
-          setError('Unable to load audio due to CORS restrictions. Please ensure the audio server allows cross-origin requests.');
-        } else {
-          setError('Failed to load audio. Please check the audio file format and server configuration.');
-        }
-      } else {
-        setError('Failed to play audio. Please try again.');
-      }
-    }
-  };
-
-  const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-    if (status.isLoaded) {
-      setPosition(status.positionMillis || 0);
-      setDuration(status.durationMillis || 0);
-      setIsPlaying(status.isPlaying || false);
-    }
-  };
-
   const skipTrack = async () => {
-    if (!canSkip) return;
+    if (!canSkip || !currentTrack || !user?.id) return;
     
     fadeAudioAndTransition(() => {
       // Maintain the current broadened search state when skipping
@@ -753,30 +464,86 @@ export default function DiscoverScreen() {
     setRating(stars);
     
     try {
-      const { error } = await supabase
+      // Determine gamification flags
+      const isBlindRating = !trackRevealed; // If track was not revealed before rating
+      
+      // Determine if rating is outside user preferences
+      let isOutsidePreference = false;
+      if (userPreferences && currentTrack) {
+        const preferredGenres = userPreferences.preferred_genres || [];
+        const preferredMoods = userPreferences.preferred_moods || [];
+        
+        const isGenrePreferred = preferredGenres.includes(currentTrack.genre);
+        const isMoodPreferred = preferredMoods.includes(currentTrack.mood);
+        
+        // Consider it "outside preference" if either genre or mood is not preferred
+        // and the user has preferences set for that category, and the rating is positive (4-5 stars)
+        if (stars >= 4 && (
+          (preferredGenres.length > 0 && !isGenrePreferred) ||
+          (preferredMoods.length > 0 && !isMoodPreferred)
+        )) {
+          isOutsidePreference = true;
+        }
+      }
+
+      const listenPercentage = duration > 0 ? position / duration : 0;
+
+      // Insert user rating
+      const { error: ratingError } = await supabase
         .from('user_ratings')
         .insert({
           track_id: currentTrack.id,
           rating: stars,
           review_text: review.trim() || null,
           profile_id: user.id,
-          user_id: user.id,
+          user_id: user.id, // Keep for backward compatibility
+          is_blind_rating: isBlindRating,
+          is_outside_preference: isOutsidePreference,
+          listen_percentage: listenPercentage,
         });
 
-      if (error) {
-        if (error.code !== '23505') {
-          throw error;
+      // Handle duplicate rating error gracefully
+      if (ratingError && ratingError.code === '23505') {
+        console.warn('Attempted to re-rate an already rated track. Skipping update.');
+        return;
+      } else if (ratingError) {
+        throw ratingError;
+      }
+
+      // Call gamification RPC function only for good ratings
+      let gamificationData = null;
+      if (stars >= 4) {
+        const { data: gamificationResult, error: gamificationError } = await supabase.rpc('calculate_gamification_rewards', {
+          p_user_id: user.id,
+          p_rating_data: {
+            track_id: currentTrack.id,
+            rating: stars,
+            review_text: review.trim() || null,
+            is_blind_rating: isBlindRating,
+            is_outside_preference: isOutsidePreference,
+            listen_percentage: listenPercentage,
+          },
+        });
+
+        if (gamificationError) {
+          console.error('Error calculating gamification rewards:', gamificationError);
+        } else if (gamificationResult) {
+          gamificationData = gamificationResult;
+          setGamificationReward(gamificationResult);
+          
+          // Refresh user data to update XP
+          refreshUser();
         }
       }
 
-      // Update user stats
+      // Update user stats (legacy)
       try {
         const { error: statsError } = await supabase
           .from('user_stats')
           .upsert({
             profile_id: user.id,
             user_id: user.id,
-            total_tracks_rated: 1,
+            total_tracks_rated_count: 1,
             updated_at: new Date().toISOString(),
           }, {
             onConflict: 'user_id'
@@ -798,8 +565,18 @@ export default function DiscoverScreen() {
         setShowThankYou(false);
         setIsTransitioning(false);
         setShowWelcomeTip(false);
+        
+        // Unveil track in global audio player for high ratings
+        unveilTrack();
+        
+        // Show gamification reward immediately when track is revealed
+        if (gamificationData) {
+          setShowGamificationReward(true);
+        }
       } else {
         showThankYouMessage();
+        // For low ratings, just immediately load next track without thank you message
+        loadNextTrack(false, selectedSessionMood, isBroadenedSearch, true);
       }
     } catch (error) {
       console.error('Error submitting rating:', error);
@@ -837,23 +614,20 @@ export default function DiscoverScreen() {
     });
   };
 
-  const handleNewSession = () => {
+  const handleNewSession = async () => {
     setState('mood_selection');
     setSelectedSessionMood(null);
     setCurrentTrack(null);
     // Reset broadened search state when starting new session
     setIsBroadenedSearch(false);
-    if (sound) {
-      sound.unloadAsync();
-      setSound(null);
-    }
-    setIsPlaying(false);
-    setPosition(0);
-    setDuration(0);
+    
+    // Stop audio using global context
+    await stop();
+    
     resetRatingAnimations();
     
     // Refresh available moods for new session
-    loadUserPreferences();
+    await loadUserPreferences();
   };
 
   const handleBroadenSearch = () => {
@@ -864,23 +638,20 @@ export default function DiscoverScreen() {
     loadNextTrack(false, selectedSessionMood, true);
   };
 
-  const handleChooseDifferentMood = () => {
+  const handleChooseDifferentMood = async () => {
     setState('mood_selection');
     setSelectedSessionMood(null);
     setCurrentTrack(null);
     // Reset broadened search state when choosing different mood
     setIsBroadenedSearch(false);
-    if (sound) {
-      sound.unloadAsync();
-      setSound(null);
-    }
-    setIsPlaying(false);
-    setPosition(0);
-    setDuration(0);
+    
+    // Stop audio using global context
+    await stop();
+    
     resetRatingAnimations();
     
     // Refresh available moods
-    loadUserPreferences();
+    await loadUserPreferences();
   };
 
   const handleGoToHistory = () => {
@@ -898,7 +669,7 @@ export default function DiscoverScreen() {
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         <Animated.View entering={FadeIn.duration(300)} exiting={FadeOut.duration(300)} style={{ flex: 1 }}>
           <Screen backgroundColor={colors.background} withoutBottomSafeArea paddingHorizontal={0}>
-            <View style={{ flex: 1, paddingHorizontal: spacing.lg }}>
+            <View style={{ flex: 1, paddingHorizontal: spacing.lg, paddingBottom }}>
               <SessionHeader
                 selectedMood={selectedSessionMood}
                 onNewSession={handleNewSession}
@@ -921,7 +692,7 @@ export default function DiscoverScreen() {
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         <Animated.View entering={FadeIn.duration(300)} exiting={FadeOut.duration(300)} style={{ flex: 1 }}>
           <Screen backgroundColor={colors.background} withoutBottomSafeArea paddingHorizontal={0}>
-            <View style={{ flex: 1, paddingHorizontal: spacing.lg }}>
+            <View style={{ flex: 1, paddingHorizontal: spacing.lg, paddingBottom }}>
               <SessionHeader
                 selectedMood={selectedSessionMood}
                 onNewSession={handleNewSession}
@@ -944,14 +715,14 @@ export default function DiscoverScreen() {
         <Animated.View entering={FadeIn.duration(300)} exiting={FadeOut.duration(300)} style={{ flex: 1 }}>
           <Screen backgroundColor={colors.background} withoutBottomSafeArea>
             <AnimationBackground>
-              <View style={{ flex: 1, paddingHorizontal: spacing.lg }}>
+              <View style={{ flex: 1, paddingHorizontal: spacing.lg, paddingBottom }}>
                 {/* Logo at top left */}
                 <View style={{ 
                   position: 'absolute', 
                   top: spacing.md,
                   zIndex: 10 
                 }}>
-                  <Text variant="button" color="primary" style={{ fontSize: 20 }}>
+                  <Text variant="button" color="primary" style={{ fontSize: 24 }}>
                     unknown
                   </Text>
                 </View>
@@ -1002,9 +773,11 @@ export default function DiscoverScreen() {
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         <Animated.View entering={FadeIn.duration(300)} exiting={FadeOut.duration(300)} style={{ flex: 1 }}>
           <Screen backgroundColor={colors.background} withoutBottomSafeArea>
-            <LoadingState
-              selectedMood={selectedSessionMood}
-            />
+            <View style={{ flex: 1, paddingBottom }}>
+              <LoadingState
+                selectedMood={selectedSessionMood}
+              />
+            </View>
           </Screen>
         </Animated.View>
       </View>
@@ -1016,11 +789,13 @@ export default function DiscoverScreen() {
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         <Animated.View entering={FadeIn.duration(300)} exiting={FadeOut.duration(300)} style={{ flex: 1 }}>
           <Screen backgroundColor={colors.background} withoutBottomSafeArea>
-            <ErrorState
-              error={error}
-              onRetry={() => loadNextTrack(false, selectedSessionMood, isBroadenedSearch)}
-              onNewSession={handleNewSession}
-            />
+            <View style={{ flex: 1, paddingBottom }}>
+              <ErrorState
+                error={error}
+                onRetry={() => loadNextTrack(false, selectedSessionMood, isBroadenedSearch)}
+                onNewSession={handleNewSession}
+              />
+            </View>
           </Screen>
         </Animated.View>
       </View>
@@ -1044,7 +819,14 @@ export default function DiscoverScreen() {
             onDiscoverNext={handleDiscoverNext}
             userRating={rating}
             userReview={review}
+            gamificationReward={gamificationReward}
+            showGamificationReward={showGamificationReward}
+            onGamificationRewardDismiss={() => {
+              setShowGamificationReward(false);
+              setGamificationReward(null);
+            }}
             withoutBottomSafeArea
+            paddingBottom={paddingBottom}
           />
         </Animated.View>
       </View>
@@ -1072,6 +854,15 @@ export default function DiscoverScreen() {
                 visible={showThankYou}
               />
 
+              <GamificationRewardDisplay
+                reward={gamificationReward}
+                visible={showGamificationReward}
+                onDismiss={() => {
+                  setShowGamificationReward(false);
+                  setGamificationReward(null);
+                }}
+              />
+
               <TransitionOverlay
                 visible={isTransitioning}
               />
@@ -1081,22 +872,23 @@ export default function DiscoverScreen() {
                 style={{ flex: 1 }}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
               >
-                <Animated.View style={[fadeStyle, { height: '100%', width: '100%', alignItems: 'center', paddingHorizontal: spacing.lg }]}>
+                <Animated.View style={[fadeStyle, { height: '100%', width: '100%', alignItems: 'center', paddingHorizontal: spacing.lg, paddingBottom }]}>
                   {state === 'full_listening' && currentTrack ? (
                     <FullListeningMode
                       track={currentTrack}
                       isPlaying={isPlaying}
-                      onPlayPause={playPauseAudio}
+                      onPlayPause={playPause}
                       position={position}
                       duration={duration}
                       userRating={rating}
                       userReview={review}
                       onSkip={skipTrack}
+                      paddingBottom={paddingBottom}
                     />
                   ) : !showRating ? (
                     <PlaybackControls
                       isPlaying={isPlaying}
-                      onPlayPause={playPauseAudio}
+                      onPlayPause={playPause}
                       position={position}
                       duration={duration}
                       canSkip={canSkip}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Image, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Image, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Play, Pause, SkipForward } from 'lucide-react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { Heading } from '@/components/typography/Heading';
@@ -19,6 +19,7 @@ interface FullListeningModeProps {
   userReview: string;
   onPlayPause: () => void;
   onSkip: () => void;
+  paddingBottom?: number;
 }
 
 export function FullListeningMode({
@@ -30,13 +31,22 @@ export function FullListeningMode({
   userReview,
   onPlayPause,
   onSkip,
+  paddingBottom,
 }: FullListeningModeProps) {
   const progressStyle = useAnimatedStyle(() => ({
     width: duration > 0 ? `${(position / duration) * 100}%` : '0%',
   }));
 
   return (
-    <View style={styles.container}>
+    <ScrollView 
+      style={styles.container}
+      contentContainerStyle={{ 
+        paddingBottom,
+        alignItems: 'center',
+        paddingTop: spacing.md
+      }}
+      showsVerticalScrollIndicator={false}
+    >
       {/* Cover Art with Play Button */}
       <View style={styles.artworkContainer}>
         <View style={styles.artworkWrapper}>
@@ -64,6 +74,15 @@ export function FullListeningMode({
               <Play size={24} color={colors.text.primary} strokeWidth={2} style={{ marginLeft: 2 }} />
             )}
           </TouchableOpacity>
+
+          {/* Next Button Overlay */}
+          <TouchableOpacity
+            onPress={onSkip}
+            style={styles.nextButtonOverlay}
+            activeOpacity={0.8}
+          >
+            <SkipForward size={20} color={colors.text.primary} strokeWidth={2} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -84,47 +103,32 @@ export function FullListeningMode({
         </View>
       </View>
 
-      {/* Next Button */}
-      <Button
-        variant="secondary"
-        size="medium"
-        onPress={onSkip}
-        icon={<SkipForward size={20} color={colors.text.secondary} strokeWidth={2} />}
-        iconPosition="left"
-        style={styles.nextButton}
-      >
-        Next
-      </Button>
-
       {/* Rating Display */}
-      <View style={styles.ratingDisplay}>
+      <TouchableOpacity style={styles.ratingDisplay} onPress={() => {}}>
         <Text variant="body" color="primary" style={styles.ratingTitle}>
           Your Rating
         </Text>
         <StarRating rating={userRating} readonly style={styles.starRating} />
         {userReview && userReview.trim() ? (
           <View style={styles.reviewContainer}>
-            <Text style={styles.quoteSymbol}>"</Text>
             <Text variant="body" color="secondary" style={styles.reviewText}>
               {userReview.trim()}
             </Text>
-            <Text style={styles.quoteSymbol}>"</Text>
           </View>
         ) : null}
-      </View>
-    </View>
+      </TouchableOpacity>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: '100%',
   },
   artworkContainer: {
     alignItems: 'center',
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   artworkWrapper: {
     width: 280,
@@ -150,16 +154,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   placeholderEmoji: {
-    fontSize: 64,
+    fontSize: 48,
   },
   playButton: {
     position: 'absolute',
     top: '50%',
     left: '50%',
-    transform: [{ translateX: -30 }, { translateY: -30 }],
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    transform: [{ translateX: -25 }, { translateY: -25 }],
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: 'rgba(69, 36, 81, 0.9)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -171,19 +175,20 @@ const styles = StyleSheet.create({
   },
   trackInfo: {
     alignItems: 'center',
-    marginBottom: spacing.xl,
-  },
-  trackTitle: {
-    fontSize: 24,
     marginBottom: spacing.sm,
   },
+  trackTitle: {
+    fontSize: 22,
+    marginBottom: spacing.xs,
+  },
   trackArtist: {
-    fontSize: 18,
+    fontSize: 16,
   },
   progressContainer: {
     width: '100%',
     maxWidth: 320,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.sm,
+    marginTop: spacing.sm,
   },
   progressBar: {
     height: 4,
@@ -195,15 +200,23 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderRadius: 2,
   },
-  nextButton: {
-    marginBottom: spacing.xl,
+  nextButtonOverlay: {
+    position: 'absolute',
+    top: '50%',
+    right: 10,
+    transform: [{ translateY: -20 }],
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(69, 36, 81, 0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   ratingDisplay: {
     width: '100%',
-    backgroundColor: 'rgba(222, 215, 224, 0.1)',
-    borderRadius: borderRadius.lg,
-    padding: spacing.md,
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+    marginTop: spacing.md
   },
   ratingTitle: {
     fontSize: 16,
@@ -211,11 +224,12 @@ const styles = StyleSheet.create({
   },
   starRating: {
     marginBottom: spacing.sm,
+    justifyContent: 'center',
   },
   reviewContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    maxWidth: '100%',
+    alignItems: 'center',
+    width: '100%',
   },
   quoteSymbol: {
     fontSize: 28,
@@ -223,6 +237,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   reviewText: {
+    width: '100%',
     fontSize: 18,
     fontStyle: 'italic',
     flex: 1,

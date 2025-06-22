@@ -4,6 +4,7 @@ import { Users, Music } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
+import { useAudioPlayerPadding } from '@/hooks/useAudioPlayerPadding';
 import Animated, { FadeIn, FadeOut, SlideInRight, SlideOutLeft, withTiming, useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import { Screen } from '@/components/layout/Screen';
 import { Heading } from '@/components/typography/Heading';
@@ -11,7 +12,6 @@ import { Text } from '@/components/typography/Text';
 import { TabBar } from '@/components/navigation/TabBar';
 import { colors } from '@/utils/colors';
 import { spacing, borderRadius } from '@/utils/spacing';
-import { formatDate } from '@/utils/formatting';
 import ArtistUnveilView from '@/components/ArtistUnveilView';
 import ArtistDetailView from '@/components/ArtistDetailView';
 import { HistoryTrack, SubscribedArtist, TabType, TrackDisplay } from '@/types';
@@ -20,6 +20,7 @@ import { TrackListItem, ArtistListItem, FilterBar, type SortOption } from '@/com
 
 export default function HistoryScreen() {
   const { user } = useAuth();
+  const { paddingBottom } = useAudioPlayerPadding();
   const [activeTab, setActiveTab] = useState<TabType>('tracks');
   const [tracks, setTracks] = useState<HistoryTrack[]>([]);
   const [filteredTracks, setFilteredTracks] = useState<HistoryTrack[]>([]);
@@ -354,6 +355,7 @@ export default function HistoryScreen() {
           showPlaybackControls={false}
           onContinueListening={handleBackToHistory}
           withoutBottomSafeArea
+          paddingBottom={paddingBottom}
         />
       </Animated.View>
     );
@@ -369,6 +371,7 @@ export default function HistoryScreen() {
           onUnfollow={handleUnfollow}
           onFollow={handleFollow}
           isFollowing={isFollowingArtist}
+          paddingBottom={paddingBottom}
         />
       </Animated.View>
     );
@@ -376,7 +379,7 @@ export default function HistoryScreen() {
 
   if (loading) {
     return (
-      <Animated.View entering={FadeIn.duration(300)} style={{ flex: 1, backgroundColor: colors.background }}>
+      <Animated.View style={{ flex: 1, backgroundColor: colors.background }}>
         <Screen withoutBottomSafeArea>
           <View style={styles.loadingContainer}>
             <Text variant="body" color="primary">Loading your discoveries...</Text>
@@ -443,6 +446,7 @@ export default function HistoryScreen() {
           <ScrollView 
             ref={scrollViewRef}
             style={styles.content}
+            contentContainerStyle={{ paddingBottom }}
             showsVerticalScrollIndicator={false}
             onScroll={handleScroll}
             scrollEventThrottle={16}

@@ -11,6 +11,7 @@ import {
   ArrowLeft,
   ExternalLink
 } from 'lucide-react-native';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Screen } from '@/components/layout/Screen';
@@ -26,8 +27,9 @@ import {
   DEFAULT_STREAMING_PLATFORM 
 } from '@/lib/platforms';
 import SocialIcon from '@/components/media/SocialIcon';
-import { Artist, SocialLink, StreamingLink, TrackDisplay } from '@/types';
+import { Artist, SocialLink, StreamingLink, TrackDisplay, GamificationReward, Badge } from '@/types';
 import { FloatingBackButton } from '@/components/navigation';
+import { GamificationRewardDisplay } from '@/components/discover';
 
 interface ArtistUnveilViewProps {
   track: TrackDisplay;
@@ -38,6 +40,10 @@ interface ArtistUnveilViewProps {
   userReview?: string | null;
   onPlayInApp?: () => void;
   withoutBottomSafeArea?: boolean;
+  gamificationReward?: GamificationReward | null;
+  showGamificationReward?: boolean;
+  onGamificationRewardDismiss?: () => void;
+  paddingBottom?: number;
 }
 
 export default function ArtistUnveilView({ 
@@ -49,6 +55,10 @@ export default function ArtistUnveilView({
   userReview,
   onPlayInApp,
   withoutBottomSafeArea = false,
+  gamificationReward,
+  showGamificationReward = false,
+  onGamificationRewardDismiss,
+  paddingBottom,
 }: ArtistUnveilViewProps) {
   const { user } = useAuth();
   const [artist, setArtist] = useState<Artist | null>(null);
@@ -243,7 +253,16 @@ export default function ArtistUnveilView({
         <FloatingBackButton onPress={onContinueListening} />
       )}
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      {/* Gamification Reward Overlay - Show FIRST before other content */}
+      {showGamificationReward && gamificationReward && (
+        <GamificationRewardDisplay
+          reward={gamificationReward}
+          visible={showGamificationReward}
+          onDismiss={onGamificationRewardDismiss || (() => {})}
+        />
+      )}
+
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom }}>
         <View style={{ paddingHorizontal: spacing.lg }}>
           {/* Track Artwork */}
           <View style={styles.artworkContainer}>
@@ -400,7 +419,7 @@ export default function ArtistUnveilView({
               </View>
 
               {/* About the Artist */}
-              <View style={styles.section}>
+              <View style={styles.lastSection}>
                 <Heading variant="h4" color="primary" style={styles.sectionTitle}>
                   About the Artist
                 </Heading>
@@ -448,7 +467,7 @@ export default function ArtistUnveilView({
 
           {/* Playback Controls */}
           {showPlaybackControls && (
-            <View style={styles.section}>
+            <View style={[styles.section, styles.lastSection]}>
               <View style={styles.playbackControls}>
                 {onContinueListening && (
                   <Button
@@ -457,7 +476,6 @@ export default function ArtistUnveilView({
                     onPress={onContinueListening}
                     icon={<Play size={20} color={colors.text.primary} strokeWidth={2} />}
                     iconPosition="left"
-                    style={styles.playbackButton}
                   >
                     Listen to Full Track
                   </Button>
@@ -470,7 +488,6 @@ export default function ArtistUnveilView({
                     onPress={onDiscoverNext}
                     icon={<SkipForward size={20} color={colors.text.primary} strokeWidth={2} />}
                     iconPosition="left"
-                    style={styles.playbackButton}
                   >
                     Discover Next
                   </Button>
@@ -596,14 +613,17 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: spacing.xl,
   },
+  lastSection: {
+    marginBottom: spacing.sm,
+  },
   sectionTitle: {
     fontSize: 20,
     marginBottom: spacing.md,
   },
   userRatingContainer: {
-    backgroundColor: 'rgba(222, 215, 224, 0.1)',
+    // backgroundColor: 'rgba(222, 215, 224, 0.1)',
     borderRadius: borderRadius.lg,
-    padding: spacing.md,
+    // padding: spacing.md,
     alignItems: 'flex-start',
     width: '100%',
   },
@@ -617,6 +637,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     maxWidth: '100%',
+    marginTop: spacing.sm,
   },
   quoteSymbol: {
     fontSize: 28,
@@ -638,7 +659,6 @@ const styles = StyleSheet.create({
   },
   streamingButtonsRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
   },
   preferredStreamingButton: {
     backgroundColor: colors.surface,
@@ -650,7 +670,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   followButton: {
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   socialLinksContainer: {
     flexDirection: 'row',
@@ -703,9 +723,6 @@ const styles = StyleSheet.create({
   },
   playbackControls: {
     gap: spacing.sm,
-  },
-  playbackButton: {
-    marginBottom: spacing.sm,
   },
   modalOverlay: {
     flex: 1,

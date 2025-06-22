@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Chrome as Home, History, Settings, User } from 'lucide-react-native';
+import { Chrome as Home, History, Trophy, User } from 'lucide-react-native';
 import { colors } from '@/utils/colors';
 
 export default function TabLayout() {
@@ -24,9 +24,6 @@ export default function TabLayout() {
           fontSize: 12,
           fontFamily: 'Chillax-Regular',
         },
-        // Smooth transitions between tabs
-        animation: 'fade',
-        animationDuration: 300,
       }}>
       <Tabs.Screen
         name="index"
@@ -47,11 +44,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="preferences"
+        name="journey"
         options={{
-          title: 'Preferences',
+          title: 'Journey',
           tabBarIcon: ({ size, color }) => (
-            <Settings size={size} color={color} strokeWidth={1.5} />
+            <Trophy size={size} color={color} strokeWidth={1.5} />
           ),
         }}
       />

@@ -35,34 +35,42 @@ export class AuthService {
   }
 
   static async getCurrentUser(): Promise<AuthUser | null> {
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    // If there's an authentication error (like invalid refresh token), clear the session
-    if (authError) {
-      console.warn('Authentication error detected, clearing session:', authError.message);
-      // Clear the invalid session silently
-      await supabase.auth.signOut();
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (!user) {
+        return null;
+      }
+
+      // If there's an authentication error (like invalid refresh token), clear the session
+      if (authError) {
+        console.warn('Authentication error detected, clearing session:', authError.message);
+        // Clear the invalid session silently
+        await supabase.auth.signOut();
+        return null;
+      }
+
+
+      // Get user profile
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching profile:', error);
+      }
+
+      return {
+        id: user.id,
+        email: user.email || '',
+        profile: profile || null,
+      };
+    } catch (error) {
+      console.error('Unexpected error in getCurrentUser:', error);
       return null;
     }
-
-    if (!user) return null;
-
-    // Get user profile
-    const { data: profile, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-
-    if (error && error.code !== 'PGRST116') {
-      console.error('Error fetching profile:', error);
-    }
-
-    return {
-      id: user.id,
-      email: user.email || '',
-      profile: profile || null,
-    };
   }
 
   static async updateProfile(updates: Partial<Profile>) {
@@ -130,7 +138,7 @@ export class AuthService {
       .upsert({
         profile_id: user.id,
         user_id: user.id, // Keep for backward compatibility
-        total_tracks_rated: 0,
+        total_tracks_rated_count: 0,
         current_streak_days: 0,
         longest_streak_days: 0,
         total_points: 0,

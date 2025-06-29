@@ -16,7 +16,7 @@ import { fonts } from '@/lib/fonts';
 import { useAudioPlayerPadding } from '@/hooks/useAudioPlayerPadding';
 
 export default function JourneyScreen() {
-  const { user, refreshUser } = useAuth();
+  const { user } = useAuth();
   const { paddingBottom } = useAudioPlayerPadding();
   const [stats, setStats] = useState<UserStats>({
     totalTracksRatedCount: 0,
@@ -42,7 +42,6 @@ export default function JourneyScreen() {
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardData | null>(null);
   const [favoriteGenre, setFavoriteGenre] = useState<string>('');
   const [favoriteMood, setFavoriteMood] = useState<string>('');
-  const [leastFavoriteGenre, setLeastFavoriteGenre] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [showBadgesModal, setShowBadgesModal] = useState(false);
   const [showLeaderboardModal, setShowLeaderboardModal] = useState(false);
@@ -52,7 +51,6 @@ export default function JourneyScreen() {
     React.useCallback(() => {
       if (user?.id) {
         loadUserStats();
-        refreshUser(); // Refresh user profile data including total_xp
       }
     }, [user?.id]) // Only depend on user.id, not the entire user object
   );
@@ -299,13 +297,13 @@ export default function JourneyScreen() {
       </View>
 
       {/* Music Preferences */}
-      <View style={styles.section}>
+      {favoriteGenre || favoriteMood ? <View style={styles.section}>
         <Heading variant="h4" color="primary" style={styles.sectionTitle}>
           Your Music DNA
         </Heading>
         
         <View style={styles.preferencesContainer}>
-          {favoriteGenre && (
+          {favoriteGenre ? (
             <View>
               <Text variant="caption" color="secondary" style={styles.preferenceLabel}>
                 Favorite Genre
@@ -314,9 +312,9 @@ export default function JourneyScreen() {
                 {favoriteGenre}
               </Text>
             </View>
-          )}
+          ) : null}
           
-          {favoriteMood && (
+          {favoriteMood ? (
             <View>
               <Text variant="caption" color="secondary" style={styles.preferenceLabel}>
                 Favorite Mood
@@ -325,12 +323,12 @@ export default function JourneyScreen() {
                 {favoriteMood}
               </Text>
             </View>
-          )}
+          ) : null}
         </View>
-      </View>
+      </View> : null}
 
       {/* Newest Achievements */}
-      {getNewestBadges().length > 0 && (
+      {getNewestBadges().length > 0 ? (
         <View style={styles.section}>
           <Heading variant="h4" color="primary" style={styles.sectionTitle}>
             Recent Achievements
@@ -352,7 +350,7 @@ export default function JourneyScreen() {
             ))}
           </View>
         </View>
-      )}
+      ) : null}
 
       {/* Action Buttons */}
       <View style={styles.lastSection}>
@@ -401,11 +399,11 @@ export default function JourneyScreen() {
             </View>
             
             {/* if no unlocked badges, show a message */}
-            {getUnlockedBadgesCount() === 0 && (
+            {getUnlockedBadgesCount() === 0 ? (
               <View style={styles.noBadgesContainer}>
                 <Text variant="body" color="secondary">No badges unlocked yet</Text>
               </View>
-            )}
+            ) : null}
 
             <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
               {['discovery', 'engagement', 'critic', 'listening', 'social', 'special', 'experimental'].map((category) => {
@@ -472,7 +470,7 @@ export default function JourneyScreen() {
             </View>
             
             <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
-              {leaderboardData && (
+              {leaderboardData ? (
                 <View style={styles.leaderboardContainer}>
                   <View style={styles.leaderboardList}>
                     {leaderboardData.leaderboard.map((entry) => (
@@ -514,6 +512,10 @@ export default function JourneyScreen() {
                       </View>
                     ))}
                   </View>
+                </View>
+              ) : (
+                <View style={styles.noBadgesContainer}>
+                  <Text variant="body" color="secondary">No leaderboard data available</Text>
                 </View>
               )}
             </ScrollView>

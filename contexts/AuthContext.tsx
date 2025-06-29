@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import { AuthService } from '@/lib/auth';
 import { AuthUser } from '@/types';
 
@@ -7,7 +7,7 @@ interface AuthContextType {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ success: boolean; error: any | null }>;
   signUp: (email: string, password: string) => Promise<void>;
-  signOut: () => Promise<void>;
+  signOut: (callback?: () => void) => Promise<void>;
   updateProfile: (updates: any) => Promise<void>;
   completeOnboarding: (data: any) => Promise<void>;
   refreshUser: () => Promise<void>; // Add refresh function
@@ -61,8 +61,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AuthService.signUp(email, password);
   };
 
-  const signOut = async () => {
+  const signOut = async (callback?: () => void) => {
     await AuthService.signOut();
+    callback?.();
     setUser(null);
   };
 

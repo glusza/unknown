@@ -3,10 +3,14 @@ import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Heading } from '@/components/typography/Heading';
 import { Text } from '@/components/typography/Text';
 import { StarRating } from '@/components/rating/StarRating';
+import { Button } from '@/components/buttons/Button';
+import { Play } from 'lucide-react-native';
 import { colors } from '@/utils/colors';
 import { spacing, borderRadius } from '@/utils/spacing';
 import { formatDate } from '@/utils/formatting';
 import { fonts } from '@/lib/fonts';
+import { useAudio } from '@/contexts/AudioContext';
+import { Track } from '@/types/track.type';
 
 interface TrackListItemProps {
   track: {
@@ -19,12 +23,22 @@ interface TrackListItemProps {
     review_text?: string;
     created_at: string;
     artist_location?: string;
+    artwork_url?: string;
+    audio_url?: string;
+    duration?: number;
   };
   onPress: () => void;
   showSeparator?: boolean;
 }
 
-export const TrackListItem = React.memo(function TrackListItem({ track, onPress, showSeparator = true }: TrackListItemProps) {
+export const TrackListItem = React.memo(function TrackListItem({
+  track,
+  onPress,
+  showSeparator = true,
+}: TrackListItemProps) {
+  const { loadTrack, unveilTrack, showGlobalPlayer, setPlayingFromFinds } =
+    useAudio();
+
   const extractCityFromLocation = (location: string | undefined): string => {
     if (!location) return '';
     // Extract city name (first part before comma)
@@ -32,20 +46,54 @@ export const TrackListItem = React.memo(function TrackListItem({ track, onPress,
     return city;
   };
 
+  const handleListenNow = async () => {
+    try {
+      if (!track.audio_url) {
+        console.warn('Track missing required audio properties');
+        return;
+      }
+
+      // Create a Track object from the track data
+      const trackToPlay: Track = {
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        genre: track.genre,
+        mood: track.mood,
+        audio_url: track.audio_url,
+        artwork_url: track.artwork_url,
+      };
+
+      // Load and play the track
+      await loadTrack(trackToPlay, true);
+
+      // Mark track as unveiled since it's from user's finds
+      unveilTrack();
+
+      // Show the global player
+      showGlobalPlayer();
+
+      // Mark as playing from finds to enable expansion
+      setPlayingFromFinds(true);
+    } catch (error) {
+      console.error('Error playing track:', error);
+    }
+  };
+
   const renderTrackTags = () => {
     const tags = [];
-    
+
     // Add genre
     if (track.genre) {
       tags.push({ text: track.genre, bold: false });
     }
-    
+
     // Add city (medium weight)
     const city = extractCityFromLocation(track.artist_location);
     if (city) {
       tags.push({ text: city, bold: true });
     }
-    
+
     // Add mood
     if (track.mood) {
       tags.push({ text: track.mood, bold: false });
@@ -81,7 +129,7 @@ export const TrackListItem = React.memo(function TrackListItem({ track, onPress,
               {track.artist}
             </Text>
           </View>
-          
+
           <Text variant="caption" color="secondary" style={styles.trackDate}>
             {formatDate(track.created_at)}
           </Text>
@@ -103,8 +151,24 @@ export const TrackListItem = React.memo(function TrackListItem({ track, onPress,
             </Text>
           </View>
         )}
+
+        {/* Listen Now Section */}
+        <View style={styles.listenNowSection}>
+          <Button
+            variant="primary"
+            size="small"
+            onPress={handleListenNow}
+            icon={
+              <Play size={16} color={colors.text.primary} strokeWidth={2} />
+            }
+            iconPosition="left"
+            style={styles.listenButton}
+          >
+            Listen Now
+          </Button>
+        </View>
       </TouchableOpacity>
-      
+
       {showSeparator && <View style={styles.separator} />}
     </View>
   );
@@ -162,11 +226,25 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     padding: spacing.md,
     marginTop: spacing.xs,
+    marginBottom: spacing.sm,
   },
   reviewText: {
     fontSize: 14,
     lineHeight: 20,
     fontStyle: 'italic',
+  },
+  listenNowSection: {
+    paddingTop: spacing.sm,
+  },
+  listenNowTitle: {
+    fontSize: 16,
+    marginBottom: spacing.sm,
+    fontFamily: fonts.chillax.medium,
+  },
+  listenButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   separator: {
     height: 1,

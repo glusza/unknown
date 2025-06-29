@@ -1,10 +1,19 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { Chrome as Home, History, Trophy, User, Gem, Radar, Route } from 'lucide-react-native';
+import { User, Gem, Radar, Route } from 'lucide-react-native';
+import { TouchableOpacity, Image, StyleSheet, Linking } from 'react-native';
 import { colors } from '@/utils/colors';
 import GlobalAudioPlayer from '@/components/GlobalAudioPlayer';
 
 export default function TabLayout() {
+  const handlePressBolt = async () => {
+    try {
+      await Linking.openURL('https://bolt.new/');
+    } catch (error) {
+      console.error('Failed to open URL:', error);
+    }
+  };
+
   return (
     <>
       <Tabs
@@ -65,6 +74,27 @@ export default function TabLayout() {
             ),
           }}
         />
+
+        <Tabs.Screen
+          name="bolt"
+          options={{
+            tabBarLabelStyle: {
+              display: 'none',
+            },
+            tabBarIconStyle: {
+              marginTop: 6,
+            },
+            tabBarIcon: () => (
+              <TouchableOpacity onPress={handlePressBolt} style={styles.boltBadge} activeOpacity={0.8}>
+                <Image 
+                  source={require('../../assets/images/black_circle_360x360.png')} 
+                  style={styles.boltBadgeImage}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
+            ),
+          }}
+        />
       </Tabs>
       
       {/* Global Audio Player - positioned above tab bar */}
@@ -72,3 +102,15 @@ export default function TabLayout() {
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  boltBadge: {
+    padding: 8,
+    backgroundColor: 'transparent',
+    borderRadius: 20,
+  },
+  boltBadgeImage: {
+    width: 40,
+    height: 40,
+  },
+});

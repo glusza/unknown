@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Alert, TextInput, Keyboard, TouchableWithoutFeedback, Platform, KeyboardAvoidingView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
 import { Shuffle } from 'lucide-react-native';
 import Animated, { 
   useAnimatedStyle, 
@@ -12,12 +10,9 @@ import Animated, {
   withSequence,
   withDelay,
   runOnJS,
-  interpolate,
-  Extrapolate,
   FadeIn,
   FadeOut,
 } from 'react-native-reanimated';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAudio } from '@/contexts/AudioContext';
 import { colors } from '@/utils/colors';
@@ -26,18 +21,14 @@ import { useAudioPlayerPadding } from '@/hooks/useAudioPlayerPadding';
 import { Button } from '@/components/buttons';
 import { Heading } from '@/components/typography';
 import { Text } from '@/components/typography/Text';
-import { Logo } from '@/components/typography/Logo';
 import ArtistUnveilView from '@/components/ArtistUnveilView';
-import { Track, UserPreferences, DiscoverState, AnimationBackgroundProps, GamificationReward } from '@/types';
+import { Track, DiscoverState, AnimationBackgroundProps, GamificationReward } from '@/types';
 import {
-  MoodSelector,
   LoadingState,
   SessionHeader,
-  WelcomeTip,
   PlaybackControls,
   RatingInterface,
   FullListeningMode,
-  ThankYouOverlay,
   TransitionOverlay,
   ErrorState,
   NoTracksInPreferencesState,
@@ -48,6 +39,14 @@ import { getMoodsForSession } from '@/utils/music';
 import { type Mood } from '@/utils/constants';
 import { MoodButtons } from '@/components/selection';
 import { Screen } from '@/components/layout/Screen';
+import { 
+  useUserPreferences, 
+  useRandomTrack, 
+  useRatedTrackIds,
+  useSubmitRating,
+  useDiscoveryStats,
+  getUserHasTracksAvailable
+} from '@/lib/queries';
 
 // Animation Background Component - placeholder for future animation files
 function AnimationBackground({ animationUrl, children }: AnimationBackgroundProps) {
@@ -98,20 +97,14 @@ export default function DiscoverScreen() {
   const [review, setReview] = useState('');
   const [showRating, setShowRating] = useState(false);
   const [trackRevealed, setTrackRevealed] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showWelcomeTip, setShowWelcomeTip] = useState(false);
-  const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
-  const [showThankYou, setShowThankYou] = useState(false);
   const [ratingThreshold] = useState(0.05); // 5% of track length
   const [canSkip, setCanSkip] = useState(true);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showReviewInput, setShowReviewInput] = useState(false);
   const [isReviewFocused, setIsReviewFocused] = useState(false);
-  const [totalTracksRated, setTotalTracksRated] = useState(0);
   // Track if we're in broadened search mode (Surprise me or broadened search)
   const [isBroadenedSearch, setIsBroadenedSearch] = useState(false);
-  const [ratedTrackIds, setRatedTrackIds] = useState<string[]>([]);
   
   // Gamification state
   const [gamificationReward, setGamificationReward] = useState<GamificationReward | null>(null);
@@ -122,8 +115,6 @@ export default function DiscoverScreen() {
 
   // Animation shared values - always called in the same order
   const pulseAnimation = useSharedValue(1);
-  const progressAnimation = useSharedValue(0);
-  const thankYouOpacity = useSharedValue(0);
   const fadeOpacity = useSharedValue(1);
   const transitionTextOpacity = useSharedValue(0);
   const ratingContainerOpacity = useSharedValue(0);
@@ -137,6 +128,26 @@ export default function DiscoverScreen() {
   const reviewInputHeight = useSharedValue(0);
   const moodSelectionOpacity = useSharedValue(1);
   const moodSelectionScale = useSharedValue(1);
+
+  // Tanstack Query hooks
+  const { data: userPreferences } = useUserPreferences(user?.id);
+  const { data: ratedTrackIds = [] } = useRatedTrackIds(user?.id);
+  const { data: discoveryStats } = useDiscoveryStats(user?.id);
+  const submitRatingMutation = useSubmitRating();
+
+  // Track fetching queries
+  const randomTrackQuery = useRandomTrack({
+    sessionMood: selectedSessionMood,
+    userPreferences,
+    excludeIds: ratedTrackIds,
+    broadenSearch: isBroadenedSearch,
+  });
+
+  useEffect(() => {
+    if (isBroadenedSearch) {
+      setSelectedSessionMood(null);
+    }
+  }, [isBroadenedSearch])
 
   const fadeStyle = useAnimatedStyle(() => ({
     opacity: fadeOpacity.value,
@@ -201,75 +212,17 @@ export default function DiscoverScreen() {
     reviewInputHeight.value = 0;
   };
 
-  const loadUserData = async () => {
-    if (!user?.id) return;
-
-    try {
-      // Single query to get all user ratings data
-      const { data: ratings, error } = await supabase
-        .from('user_ratings')
-        .select('id, track_id')
-        .eq('profile_id', user.id);
-
-      if (error) throw error;
-
-      // Use the same data for all three purposes
-      const totalTracksRated = ratings?.length || 0;
-      const isFirstTimeUser = totalTracksRated === 0;
-      const ratedTrackIds = ratings?.map(r => r.track_id) || [];
-
-      // Update state
-      setTotalTracksRated(totalTracksRated);
-      if (isFirstTimeUser) {
-        setShowWelcomeTip(true);
-      }
-
-      // Store rated track IDs for use in loadNextTrack
-      setRatedTrackIds(ratedTrackIds);
-    } catch (error) {
-      console.error('Error loading user data:', error);
-    }
-  };
-
-  const loadUserPreferences = async () => {
-    if (!user?.id) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('user_preferences')
-        .select('preferred_genres, preferred_moods, min_duration, max_duration')
-        .eq('profile_id', user.id)
-        .single();
-
-      if (error && error.code !== 'PGRST116') {
-        throw error;
-      }
-
-      if (data) {
-        setUserPreferences(data);
-        // Set available moods using the utility function
-        const moodsForSession = getMoodsForSession(data.preferred_moods || [], 3);
-        setAvailableMoods(moodsForSession);
-      } else {
-        // No preferences found, show 3 random moods
-        const moodsForSession = getMoodsForSession([], 3);
-        setAvailableMoods(moodsForSession);
-      }
-    } catch (error) {
-      console.error('Error loading user preferences:', error);
+  // Set available moods using the utility function
+  useEffect(() => {
+    if (userPreferences) {
+      const moodsForSession = getMoodsForSession(userPreferences.preferred_moods as Mood[] || [], 3);
+      setAvailableMoods(moodsForSession);
+    } else {
       // Fallback to 3 random moods
       const moodsForSession = getMoodsForSession([], 3);
       setAvailableMoods(moodsForSession);
     }
-  };
-
-  // Load user data when user changes
-  useEffect(() => {
-    if (user?.id) {
-      loadUserData();
-      loadUserPreferences();
-    }
-  }, [user]);
+  }, [userPreferences]);
 
   const handleMoodSelection = async (mood: string | null) => {
     setSelectedSessionMood(mood);
@@ -284,98 +237,48 @@ export default function DiscoverScreen() {
     
     // Start loading track
     setState('loading');
-    setIsLoading(true);
     
     // Wait for animation to complete, then load track
     setTimeout(async () => {
-      // For "Surprise me" (mood === null), always broaden search to avoid "no tracks" scenario
-      await loadNextTrack(false, mood, shouldBroadenSearch);
+      await loadNextTrack({autoPlay: true});
     }, 200);
   };
 
-  const loadNextTrack = async (isBackgroundLoad = false, sessionMood: string | null = null, broadenSearch = false, autoPlay = true) => {
+  const loadNextTrack = async ({autoPlay}: {autoPlay: boolean}) => {
     try {
-      if (!isBackgroundLoad && state !== 'no_tracks_in_preferences' && state !== 'no_tracks_at_all') {
-        setIsLoading(true);
-        setError(null);
-        setState('loading');
+      setState('loading');
+      setError(null);
+
+      // Check track availability first
+      const availability = await getUserHasTracksAvailable({
+        sessionMood: selectedSessionMood,
+        userPreferences,
+        excludeIds: ratedTrackIds,
+      });
+
+      if (!availability?.hasTracksAtAll) {
+        setState('no_tracks_at_all');
+        return;
       }
 
-      // Use stored rated track IDs instead of making another query
-      const excludeIds = ratedTrackIds || [];
-
-      // Build query based on user preferences and session mood
-      let query = supabase
-        .from('tracks')
-        .select('*')
-        .lt('spotify_streams', 5000); // Only underground tracks
-
-      // Exclude already rated tracks
-      if (excludeIds.length > 0) {
-        query = query.not('id', 'in', `(${excludeIds.join(',')})`);
+      if (!availability.hasTracksInPreferences && !isBroadenedSearch) {
+        setState('no_tracks_in_preferences');
+        return;
       }
 
-      // Use broadened search if we're in that mode OR if explicitly requested
-      const shouldUseBroadenedSearch = isBroadenedSearch || broadenSearch;
+      // Fetch a random track - the hook will automatically use the updated state values
+      const trackResult = await randomTrackQuery.refetch();
+      const randomTrack = trackResult.data;
 
-      // Apply session mood filter if selected (not "Surprise me") and not broadening search
-      if (sessionMood && !shouldUseBroadenedSearch) {
-        query = query.eq('mood', sessionMood);
-      }
-
-      // Apply user preferences if available and no specific session mood and not broadening search
-      if (userPreferences && !sessionMood && !shouldUseBroadenedSearch) {
-        if (userPreferences.preferred_genres && userPreferences.preferred_genres.length > 0) {
-          query = query.in('genre', userPreferences.preferred_genres);
-        }
-
-        if (userPreferences.preferred_moods && userPreferences.preferred_moods.length > 0) {
-          query = query.in('mood', userPreferences.preferred_moods);
-        }
-
-        query = query
-          .gte('duration', userPreferences.min_duration)
-          .lte('duration', userPreferences.max_duration);
-      }
-
-      // Get random track from filtered results
-      const { data: tracks, error: tracksError } = await query.limit(50);
-
-      if (tracksError) throw tracksError;
-
-      if (!tracks || tracks.length === 0) {
-        // If no tracks match current criteria and we haven't broadened search yet
-        if (!shouldUseBroadenedSearch) {
-          // Check if there are any tracks available at all (broadened search)
-          const { data: allTracks, error: allTracksError } = await supabase
-            .from('tracks')
-            .select('*')
-            .lt('spotify_streams', 5000)
-            .not('id', 'in', excludeIds.length > 0 ? `(${excludeIds.join(',')})` : '()')
-            .limit(1);
-
-          if (allTracksError) throw allTracksError;
-
-          if (allTracks && allTracks.length > 0) {
-            // There are tracks available, just not matching preferences
-            setState('no_tracks_in_preferences');
-            setIsLoading(false);
-            return;
-          } else {
-            // No tracks available at all
-            setState('no_tracks_at_all');
-            setIsLoading(false);
-            return;
-          }
+      if (!randomTrack) {
+        if (!isBroadenedSearch) {
+          setState('no_tracks_in_preferences');
         } else {
-          // Even broadened search found no tracks
           setState('no_tracks_at_all');
-          setIsLoading(false);
-          return;
         }
+        return;
       }
 
-      const randomTrack = tracks[Math.floor(Math.random() * tracks.length)];
       setCurrentTrack(randomTrack);
 
       // Load track into global audio context
@@ -386,7 +289,6 @@ export default function DiscoverScreen() {
       setReview('');
       setShowRating(false);
       setTrackRevealed(false);
-      setShowWelcomeTip(false);
       setCanSkip(true);
       setShowReviewInput(false);
       setIsReviewFocused(false);
@@ -402,10 +304,7 @@ export default function DiscoverScreen() {
     } catch (error) {
       console.error('Error loading track:', error);
       setError('Failed to load track. Please try again.');
-    } finally {
-      if (!isBackgroundLoad) {
-        setIsLoading(false);
-      }
+      setState('mood_selection');
     }
   };
 
@@ -431,32 +330,20 @@ export default function DiscoverScreen() {
     }, 2000);
   }, [fadeOpacity, transitionTextOpacity]);
 
-  const showThankYouMessage = () => {
-    setShowThankYou(true);
-    thankYouOpacity.value = withTiming(1, { duration: 300 });
-    
-    // Immediately reset UI state to hide rating interface
-    setShowRating(false);
-    setRating(0);
-    setReview('');
-    setShowReviewInput(false);
-    setIsReviewFocused(false);
-    
-    setTimeout(() => {
-      thankYouOpacity.value = withTiming(0, { duration: 300 }, () => {
-        runOnJS(setShowThankYou)(false);
-      });
-    }, 3000);
-  };
-
   const skipTrack = async () => {
     if (!canSkip || !currentTrack || !user?.id) return;
     
     fadeAudioAndTransition(() => {
       // Maintain the current broadened search state when skipping
-      loadNextTrack(false, selectedSessionMood, isBroadenedSearch);
+      loadNextTrack({autoPlay: true});
     });
   };
+
+  // Skip track with rating 3 (neutral)
+  const skipWithRating = async () => {
+    if (!canSkip || !currentTrack || !user?.id) return;
+    submitRating(3);
+  }
 
   const submitRating = async (stars: number) => {
     if (!currentTrack || !user?.id) return;
@@ -488,95 +375,37 @@ export default function DiscoverScreen() {
 
       const listenPercentage = duration > 0 ? position / duration : 0;
 
-      // Insert user rating
-      const { error: ratingError } = await supabase
-        .from('user_ratings')
-        .insert({
-          track_id: currentTrack.id,
-          rating: stars,
-          review_text: review.trim() || null,
-          profile_id: user.id,
-          user_id: user.id, // Keep for backward compatibility
-          is_blind_rating: isBlindRating,
-          is_outside_preference: isOutsidePreference,
-          listen_percentage: listenPercentage,
-        });
+      const result = await submitRatingMutation.mutateAsync({
+        userId: user.id,
+        trackId: currentTrack.id,
+        rating: stars,
+        reviewText: review.trim() || undefined,
+        isBlindRating,
+        isOutsidePreference,
+        listenPercentage,
+      });
 
-      // Handle duplicate rating error gracefully
-      if (ratingError && ratingError.code === '23505') {
-        console.warn('Attempted to re-rate an already rated track. Skipping update.');
-        return;
-      } else if (ratingError) {
-        throw ratingError;
+      if (result?.gamificationData) {
+        setGamificationReward(result.gamificationData);
+        // Refresh user data to update XP
+        refreshUser();
       }
-
-      // Call gamification RPC function only for good ratings
-      let gamificationData = null;
-      if (stars >= 4) {
-        const { data: gamificationResult, error: gamificationError } = await supabase.rpc('calculate_gamification_rewards', {
-          p_user_id: user.id,
-          p_rating_data: {
-            track_id: currentTrack.id,
-            rating: stars,
-            review_text: review.trim() || null,
-            is_blind_rating: isBlindRating,
-            is_outside_preference: isOutsidePreference,
-            listen_percentage: listenPercentage,
-          },
-        });
-
-        if (gamificationError) {
-          console.error('Error calculating gamification rewards:', gamificationError);
-        } else if (gamificationResult) {
-          gamificationData = gamificationResult;
-          setGamificationReward(gamificationResult);
-          
-          // Refresh user data to update XP
-          refreshUser();
-        }
-      }
-
-      // Update user stats (legacy)
-      try {
-        const { error: statsError } = await supabase
-          .from('user_stats')
-          .upsert({
-            profile_id: user.id,
-            user_id: user.id,
-            total_tracks_rated_count: 1,
-            updated_at: new Date().toISOString(),
-          }, {
-            onConflict: 'user_id'
-          });
-
-        if (statsError) {
-          console.error('Error updating stats:', statsError);
-        }
-      } catch (statsError) {
-        console.error('Error updating user stats:', statsError);
-      }
-
-      // Update local count
-      setTotalTracksRated(prev => prev + 1);
 
       if (stars >= 4) {
         setTrackRevealed(true);
         setState('revealed');
-        setShowThankYou(false);
         setIsTransitioning(false);
-        setShowWelcomeTip(false);
         
         // Unveil track in global audio player for high ratings
         unveilTrack();
         
         // Show gamification reward immediately when track is revealed
-        if (gamificationData) {
+        if (result?.gamificationData) {
           setShowGamificationReward(true);
         }
       } else {
-        showThankYouMessage();
-        // For low ratings, just immediately load next track without thank you message
-        loadNextTrack(false, selectedSessionMood, isBroadenedSearch, true);
+        // For low ratings, just immediately load next track
+        skipTrack();
       }
     } catch (error) {
       console.error('Error submitting rating:', error);
@@ -610,7 +439,7 @@ export default function DiscoverScreen() {
   const handleDiscoverNext = () => {
     fadeAudioAndTransition(() => {
       // Maintain the current broadened search state when discovering next
-      loadNextTrack(false, selectedSessionMood, isBroadenedSearch);
+      loadNextTrack({autoPlay: true});
     });
   };
 
@@ -620,22 +449,16 @@ export default function DiscoverScreen() {
     setCurrentTrack(null);
     // Reset broadened search state when starting new session
     setIsBroadenedSearch(false);
-    
-    // Stop audio using global context
-    await stop();
-    
     resetRatingAnimations();
-    
-    // Refresh available moods for new session
-    await loadUserPreferences();
   };
 
   const handleBroadenSearch = () => {
     setState('loading');
-    setIsLoading(true);
     // Set broadened search mode when user explicitly chooses to broaden
     setIsBroadenedSearch(true);
-    loadNextTrack(false, selectedSessionMood, true);
+    setTimeout(() => {
+      loadNextTrack({autoPlay: true});
+    }, 500);
   };
 
   const handleChooseDifferentMood = async () => {
@@ -649,9 +472,6 @@ export default function DiscoverScreen() {
     await stop();
     
     resetRatingAnimations();
-    
-    // Refresh available moods
-    await loadUserPreferences();
   };
 
   const handleGoToHistory = () => {
@@ -699,7 +519,7 @@ export default function DiscoverScreen() {
               />
               <NoTracksAtAllState
                 onGoToHistory={handleGoToHistory}
-                totalTracksRated={totalTracksRated}
+                totalTracksRated={discoveryStats?.totalTracks || 0}
               />
             </View>
           </Screen>
@@ -768,7 +588,7 @@ export default function DiscoverScreen() {
     );
   }
 
-  if (isLoading) {
+  if (state === 'loading' || randomTrackQuery.isFetching) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         <Animated.View entering={FadeIn.duration(300)} exiting={FadeOut.duration(300)} style={{ flex: 1 }}>
@@ -784,15 +604,18 @@ export default function DiscoverScreen() {
     );
   }
 
-  if (error) {
+  if (error || randomTrackQuery.error) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         <Animated.View entering={FadeIn.duration(300)} exiting={FadeOut.duration(300)} style={{ flex: 1 }}>
           <Screen backgroundColor={colors.background} withoutBottomSafeArea>
             <View style={{ flex: 1, paddingBottom }}>
               <ErrorState
-                error={error}
-                onRetry={() => loadNextTrack(false, selectedSessionMood, isBroadenedSearch)}
+                error={error || randomTrackQuery.error?.message || 'An error occurred'}
+                onRetry={() => {
+                  setError(null);
+                  randomTrackQuery.refetch();
+                }}
                 onNewSession={handleNewSession}
               />
             </View>
@@ -846,14 +669,6 @@ export default function DiscoverScreen() {
                 />
               </View>
 
-              {showWelcomeTip && (
-                <WelcomeTip />
-              )}
-
-              <ThankYouOverlay
-                visible={showThankYou}
-              />
-
               <GamificationRewardDisplay
                 reward={gamificationReward}
                 visible={showGamificationReward}
@@ -892,7 +707,7 @@ export default function DiscoverScreen() {
                       position={position}
                       duration={duration}
                       canSkip={canSkip}
-                      onSkip={skipTrack}
+                      onSkip={skipWithRating}
                     />
                   ) : (
                     <RatingInterface

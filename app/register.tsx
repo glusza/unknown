@@ -9,7 +9,6 @@ import { Text } from '@/components/typography/Text';
 import { TextInput } from '@/components/inputs/TextInput';
 import { PasswordInput } from '@/components/inputs/PasswordInput';
 import { Button } from '@/components/buttons/Button';
-import { SocialButton } from '@/components/buttons/SocialButton';
 import { colors } from '@/utils/colors';
 import { spacing } from '@/utils/spacing';
 import { validateEmail, validatePassword } from '@/utils/validation';
@@ -124,26 +123,13 @@ export default function RegisterScreen() {
           {/* Register Button */}
           <Button
             variant="primary"
-            size="large"
+            size="medium"
             loading={loading}
             onPress={handleRegister}
             style={styles.registerButton}
           >
             {loading ? 'Creating Account...' : 'Create Account'}
           </Button>
-
-          {/* Divider */}
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text variant="caption" color="secondary" style={styles.dividerText}>
-              or
-            </Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          {/* Social Login Buttons */}
-          <SocialButton platform="apple" onPress={() => {}} />
-          <SocialButton platform="google" onPress={() => {}} />
 
           {/* Login Link */}
           <View style={styles.loginLink}>
@@ -180,19 +166,6 @@ const styles = StyleSheet.create({
   registerButton: {
     marginTop: spacing.sm,
     marginBottom: spacing.lg,
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.surface,
-  },
-  dividerText: {
-    marginHorizontal: spacing.md,
   },
   loginLink: {
     flexDirection: 'row',

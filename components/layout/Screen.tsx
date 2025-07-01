@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/utils/colors';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface ScreenProps {
   children: React.ReactNode;
@@ -25,17 +25,24 @@ export function Screen({
   contentContainerStyle,
 }: ScreenProps) {
   const Container = scrollable ? ScrollView : View;
-  
+
   return (
     <View style={[styles.container, { backgroundColor }, style]}>
-      <SafeAreaView 
+      <SafeAreaView
         style={styles.safeArea}
-        edges={withoutBottomSafeArea ? ['top', 'left', 'right'] : ['top', 'right', 'bottom', 'left']}
+        edges={
+          withoutBottomSafeArea
+            ? ['top', 'left', 'right']
+            : ['top', 'right', 'bottom', 'left']
+        }
       >
-        <Container 
+        <Container
           style={[styles.content, { paddingHorizontal }]}
           showsVerticalScrollIndicator={showsVerticalScrollIndicator}
-          contentContainerStyle={[scrollable ? styles.scrollContent : undefined, contentContainerStyle]}
+          contentContainerStyle={[
+            scrollable ? styles.scrollContent : undefined,
+            contentContainerStyle,
+          ]}
         >
           {children}
         </Container>

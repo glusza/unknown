@@ -15,15 +15,9 @@ import '../global.css';
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
-  const { user, loading, refreshUser } = useAuth();
+  const { user, loading } = useAuth();
   const hasRedirected = useRef(false);
   const pathname = usePathname();
-
-  useEffect(() => {
-    if (!user || loading) {
-      refreshUser();
-    }
-  }, []);
 
   useEffect(() => {
     if (!loading && !hasRedirected.current) {

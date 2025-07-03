@@ -21,12 +21,14 @@ export default function GenrePreferencesScreen() {
     );
   };
 
-  const handleContinue = () => {
-    router.push({
-      pathname: '/onboarding/moods',
-      params: { genres: JSON.stringify(selectedGenres) },
-    });
-  };
+  const handleContinue =
+    ({ skip = false }: { skip?: boolean }) =>
+    () => {
+      router.push({
+        pathname: '/onboarding/moods',
+        params: { genres: skip ? '' : JSON.stringify(selectedGenres) },
+      });
+    };
 
   return (
     <Screen scrollable paddingHorizontal={24}>
@@ -56,7 +58,7 @@ export default function GenrePreferencesScreen() {
           variant="primary"
           size="large"
           disabled={selectedGenres.length === 0}
-          onPress={handleContinue}
+          onPress={handleContinue({ skip: false })}
           icon={
             <ArrowRight size={20} color={colors.text.primary} strokeWidth={2} />
           }
@@ -69,7 +71,7 @@ export default function GenrePreferencesScreen() {
         <Button
           variant="ghost"
           size="medium"
-          onPress={handleContinue}
+          onPress={handleContinue({ skip: true })}
           style={styles.skipButton}
         >
           <Text variant="body" color="secondary">

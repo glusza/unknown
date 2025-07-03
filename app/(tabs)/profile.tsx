@@ -1,6 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Modal, TouchableOpacity, ScrollView } from 'react-native';
-import { LogOut, ChevronRight, X, Music, Heart, Headphones, User, Save } from 'lucide-react-native';
+import {
+  View,
+  StyleSheet,
+  Modal,
+  TouchableOpacity,
+  ScrollView,
+} from 'react-native';
+import {
+  LogOut,
+  ChevronRight,
+  X,
+  Music,
+  Heart,
+  Headphones,
+  User,
+  Save,
+} from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAudioPlayerPadding } from '@/hooks/useAudioPlayerPadding';
 import { Screen } from '@/components/layout/Screen';
@@ -13,28 +28,30 @@ import { PasswordInput } from '@/components/inputs/PasswordInput';
 import { colors } from '@/utils/colors';
 import { spacing, borderRadius } from '@/utils/spacing';
 import { TabHeader } from '@/components/navigation';
-import { 
-  PLATFORM_NAMES, 
-  PLATFORM_COLORS, 
-  DEFAULT_STREAMING_PLATFORM 
+import {
+  PLATFORM_NAMES,
+  PLATFORM_COLORS,
+  DEFAULT_STREAMING_PLATFORM,
 } from '@/lib/platforms';
 import { GENRES, MOODS } from '@/utils/constants';
 import { useAudio } from '@/contexts/AudioContext';
-import { 
-  useUserPreferences, 
-  useUserStreamingPreferences, 
-  useUpdateUserPreferences, 
+import {
+  useUserPreferences,
+  useUserStreamingPreferences,
+  useUpdateUserPreferences,
   useUpdateStreamingPreferences,
   useDiscoveryStats,
   useUpdateProfile,
-  useUpdatePassword
+  useUpdatePassword,
 } from '@/lib/queries';
 
-const STREAMING_PLATFORMS = Object.entries(PLATFORM_NAMES).map(([id, name]) => ({
-  id,
-  name,
-  color: PLATFORM_COLORS[id as keyof typeof PLATFORM_COLORS],
-}));
+const STREAMING_PLATFORMS = Object.entries(PLATFORM_NAMES).map(
+  ([id, name]) => ({
+    id,
+    name,
+    color: PLATFORM_COLORS[id as keyof typeof PLATFORM_COLORS],
+  }),
+);
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
@@ -42,8 +59,10 @@ export default function ProfileScreen() {
   const { paddingBottom } = useAudioPlayerPadding();
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [selectedMoods, setSelectedMoods] = useState<string[]>([]);
-  const [preferredPlatform, setPreferredPlatform] = useState<string>(DEFAULT_STREAMING_PLATFORM);
-  
+  const [preferredPlatform, setPreferredPlatform] = useState<string>(
+    DEFAULT_STREAMING_PLATFORM,
+  );
+
   // Modal states
   const [showGenreModal, setShowGenreModal] = useState(false);
   const [showMoodModal, setShowMoodModal] = useState(false);
@@ -56,10 +75,11 @@ export default function ProfileScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
 
   // Tanstack Query hooks
-  const { data: userPreferences, isLoading: preferencesLoading } = useUserPreferences(user?.id);
+  const { data: userPreferences, isLoading: preferencesLoading } =
+    useUserPreferences(user?.id);
   const { data: streamingPreferences } = useUserStreamingPreferences(user?.id);
   const { data: discoveryStats } = useDiscoveryStats(user?.id);
-  
+
   const updatePreferencesMutation = useUpdateUserPreferences();
   const updateStreamingMutation = useUpdateStreamingPreferences();
   const updateProfileMutation = useUpdateProfile();
@@ -129,7 +149,7 @@ export default function ProfileScreen() {
       // Update password if provided
       if (newPassword && newPassword === confirmPassword) {
         await updatePasswordMutation.mutateAsync(newPassword);
-        
+
         // Clear password fields
         setNewPassword('');
         setConfirmPassword('');
@@ -150,18 +170,14 @@ export default function ProfileScreen() {
   };
 
   const toggleGenre = (genre: string) => {
-    setSelectedGenres(prev => 
-      prev.includes(genre) 
-        ? prev.filter(g => g !== genre)
-        : [...prev, genre]
+    setSelectedGenres((prev) =>
+      prev.includes(genre) ? prev.filter((g) => g !== genre) : [...prev, genre],
     );
   };
 
   const toggleMood = (mood: string) => {
-    setSelectedMoods(prev => 
-      prev.includes(mood) 
-        ? prev.filter(m => m !== mood)
-        : [...prev, mood]
+    setSelectedMoods((prev) =>
+      prev.includes(mood) ? prev.filter((m) => m !== mood) : [...prev, mood],
     );
   };
 
@@ -190,21 +206,25 @@ export default function ProfileScreen() {
     return (
       <Screen withoutBottomSafeArea>
         <View style={styles.loadingContainer}>
-          <Text variant="body" color="primary">Loading profile...</Text>
+          <Text variant="body" color="primary">
+            Loading profile...
+          </Text>
         </View>
       </Screen>
     );
   }
 
   return (
-    <Screen 
-      scrollable 
-      paddingHorizontal={24} 
+    <Screen
+      scrollable
+      paddingHorizontal={24}
       withoutBottomSafeArea
       contentContainerStyle={{ paddingBottom }}
     >
       <TabHeader
-        title={user?.profile?.display_name || user?.profile?.username || 'Profile'}
+        title={
+          user?.profile?.display_name || user?.profile?.username || 'Profile'
+        }
         subtitle="Manage your account and preferences"
       />
 
@@ -213,19 +233,23 @@ export default function ProfileScreen() {
         <Heading variant="h4" color="primary" style={styles.sectionTitle}>
           Discovery Stats
         </Heading>
-        
+
         <View style={styles.statsGrid}>
           <View style={styles.statItem}>
             <Text variant="button" color="primary" style={styles.statValue}>
               {discoveryStats?.totalTracks || 0}
             </Text>
-            <Text variant="caption" color="secondary">Tracks Rated</Text>
+            <Text variant="caption" color="secondary">
+              Tracks Rated
+            </Text>
           </View>
           <View style={styles.statItem}>
             <Text variant="button" color="primary" style={styles.statValue}>
               {discoveryStats?.averageRating.toFixed(1) || '0.0'}
             </Text>
-            <Text variant="caption" color="secondary">Avg Rating</Text>
+            <Text variant="caption" color="secondary">
+              Avg Rating
+            </Text>
           </View>
         </View>
       </View>
@@ -235,7 +259,7 @@ export default function ProfileScreen() {
         <Heading variant="h4" color="primary" style={styles.sectionTitle}>
           Discovery Preferences
         </Heading>
-        
+
         <Button
           variant="setting"
           size="medium"
@@ -248,14 +272,24 @@ export default function ProfileScreen() {
               <Text variant="body" color="primary" style={styles.settingTitle}>
                 Genres
               </Text>
-              <Text variant="caption" color="secondary" style={styles.settingSubtitle}>
-                {selectedGenres.length > 0 ? `${selectedGenres.length} selected` : 'None selected'}
+              <Text
+                variant="caption"
+                color="secondary"
+                style={styles.settingSubtitle}
+              >
+                {selectedGenres.length > 0
+                  ? `${selectedGenres.length} selected`
+                  : 'None selected'}
               </Text>
             </View>
-            <ChevronRight size={16} color={colors.text.secondary} strokeWidth={2} />
+            <ChevronRight
+              size={16}
+              color={colors.text.secondary}
+              strokeWidth={2}
+            />
           </View>
         </Button>
-        
+
         <Button
           variant="setting"
           size="medium"
@@ -268,19 +302,31 @@ export default function ProfileScreen() {
               <Text variant="body" color="primary" style={styles.settingTitle}>
                 Moods
               </Text>
-              <Text variant="caption" color="secondary" style={styles.settingSubtitle}>
-                {selectedMoods.length > 0 ? `${selectedMoods.length} selected` : 'None selected'}
+              <Text
+                variant="caption"
+                color="secondary"
+                style={styles.settingSubtitle}
+              >
+                {selectedMoods.length > 0
+                  ? `${selectedMoods.length} selected`
+                  : 'None selected'}
               </Text>
             </View>
-            <ChevronRight size={16} color={colors.text.secondary} strokeWidth={2} />
+            <ChevronRight
+              size={16}
+              color={colors.text.secondary}
+              strokeWidth={2}
+            />
           </View>
         </Button>
-        
+
         <Button
           variant="setting"
           size="medium"
           onPress={() => setShowPlatformModal(true)}
-          icon={<Headphones size={20} color={colors.text.primary} strokeWidth={2} />}
+          icon={
+            <Headphones size={20} color={colors.text.primary} strokeWidth={2} />
+          }
           iconPosition="left"
         >
           <View style={styles.settingContent}>
@@ -288,11 +334,21 @@ export default function ProfileScreen() {
               <Text variant="body" color="primary" style={styles.settingTitle}>
                 Streaming Platform
               </Text>
-              <Text variant="caption" color="secondary" style={styles.settingSubtitle}>
-                {PLATFORM_NAMES[preferredPlatform as keyof typeof PLATFORM_NAMES] || preferredPlatform}
+              <Text
+                variant="caption"
+                color="secondary"
+                style={styles.settingSubtitle}
+              >
+                {PLATFORM_NAMES[
+                  preferredPlatform as keyof typeof PLATFORM_NAMES
+                ] || preferredPlatform}
               </Text>
             </View>
-            <ChevronRight size={16} color={colors.text.secondary} strokeWidth={2} />
+            <ChevronRight
+              size={16}
+              color={colors.text.secondary}
+              strokeWidth={2}
+            />
           </View>
         </Button>
       </View>
@@ -302,7 +358,7 @@ export default function ProfileScreen() {
         <Heading variant="h4" color="primary" style={styles.sectionTitle}>
           Account
         </Heading>
-        
+
         <Button
           variant="setting"
           size="medium"
@@ -316,24 +372,34 @@ export default function ProfileScreen() {
                 Account Settings
               </Text>
             </View>
-            <ChevronRight size={16} color={colors.text.secondary} strokeWidth={2} />
+            <ChevronRight
+              size={16}
+              color={colors.text.secondary}
+              strokeWidth={2}
+            />
           </View>
         </Button>
-        
-        <Button 
-          variant="setting" 
-          size="medium" 
+
+        <Button
+          variant="setting"
+          size="medium"
           onPress={handleSignOut}
-          icon={<LogOut size={20} color={colors.text.primary} strokeWidth={2} />}
+          icon={
+            <LogOut size={20} color={colors.text.primary} strokeWidth={2} />
+          }
           iconPosition="left"
         >
           <View style={styles.settingContent}>
             <View style={styles.settingTextContainer}>
-              <Text variant="body" style={styles.settingTitle}>
+              <Text variant="body" color="primary" style={styles.settingTitle}>
                 Sign Out
               </Text>
             </View>
-            <ChevronRight size={16} color={colors.status.error} strokeWidth={2} />
+            <ChevronRight
+              size={16}
+              color={colors.text.secondary}
+              strokeWidth={2}
+            />
           </View>
         </Button>
       </View>
@@ -348,7 +414,9 @@ export default function ProfileScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Heading variant="h4" color="primary">Select Genres</Heading>
+              <Heading variant="h4" color="primary">
+                Select Genres
+              </Heading>
               <TouchableOpacity
                 onPress={handleGenreModalClose(false)}
                 style={styles.modalCloseButton}
@@ -356,8 +424,11 @@ export default function ProfileScreen() {
                 <X size={24} color={colors.text.secondary} strokeWidth={2} />
               </TouchableOpacity>
             </View>
-            
-            <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
+
+            <ScrollView
+              style={styles.modalScrollView}
+              showsVerticalScrollIndicator={false}
+            >
               <View style={styles.modalOptionsGrid}>
                 {GENRES.map((genre) => (
                   <SelectionChip
@@ -370,14 +441,16 @@ export default function ProfileScreen() {
                 ))}
               </View>
             </ScrollView>
-            
+
             <View style={styles.modalFooter}>
               <Button
                 variant="primary"
                 size="medium"
                 onPress={handleGenreModalClose(true)}
                 loading={updatePreferencesMutation.isPending}
-                icon={<Save size={20} color={colors.text.primary} strokeWidth={2} />}
+                icon={
+                  <Save size={20} color={colors.text.primary} strokeWidth={2} />
+                }
                 iconPosition="left"
               >
                 Save Preferences
@@ -397,7 +470,9 @@ export default function ProfileScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Heading variant="h4" color="primary">Select Moods</Heading>
+              <Heading variant="h4" color="primary">
+                Select Moods
+              </Heading>
               <TouchableOpacity
                 onPress={handleMoodModalClose(false)}
                 style={styles.modalCloseButton}
@@ -405,8 +480,11 @@ export default function ProfileScreen() {
                 <X size={24} color={colors.text.secondary} strokeWidth={2} />
               </TouchableOpacity>
             </View>
-            
-            <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
+
+            <ScrollView
+              style={styles.modalScrollView}
+              showsVerticalScrollIndicator={false}
+            >
               <View style={styles.modalOptionsGrid}>
                 {MOODS.map((mood) => (
                   <SelectionChip
@@ -419,14 +497,16 @@ export default function ProfileScreen() {
                 ))}
               </View>
             </ScrollView>
-            
+
             <View style={styles.modalFooter}>
               <Button
                 variant="primary"
                 size="medium"
                 onPress={handleMoodModalClose(true)}
                 loading={updatePreferencesMutation.isPending}
-                icon={<Save size={20} color={colors.text.primary} strokeWidth={2} />}
+                icon={
+                  <Save size={20} color={colors.text.primary} strokeWidth={2} />
+                }
                 iconPosition="left"
               >
                 Save Preferences
@@ -446,7 +526,9 @@ export default function ProfileScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Heading variant="h4" color="primary">Streaming Platform</Heading>
+              <Heading variant="h4" color="primary">
+                Streaming Platform
+              </Heading>
               <TouchableOpacity
                 onPress={handlePlatformModalClose(false)}
                 style={styles.modalCloseButton}
@@ -454,8 +536,11 @@ export default function ProfileScreen() {
                 <X size={24} color={colors.text.secondary} strokeWidth={2} />
               </TouchableOpacity>
             </View>
-            
-            <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
+
+            <ScrollView
+              style={styles.modalScrollView}
+              showsVerticalScrollIndicator={false}
+            >
               <View style={styles.modalOptionsGrid}>
                 {STREAMING_PLATFORMS.map((platform) => (
                   <SelectionChip
@@ -468,14 +553,16 @@ export default function ProfileScreen() {
                 ))}
               </View>
             </ScrollView>
-            
+
             <View style={styles.modalFooter}>
               <Button
                 variant="primary"
                 size="medium"
                 onPress={handlePlatformModalClose(true)}
                 loading={updateStreamingMutation.isPending}
-                icon={<Save size={20} color={colors.text.primary} strokeWidth={2} />}
+                icon={
+                  <Save size={20} color={colors.text.primary} strokeWidth={2} />
+                }
                 iconPosition="left"
               >
                 Save Preferences
@@ -495,7 +582,9 @@ export default function ProfileScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Heading variant="h4" color="primary">Account Settings</Heading>
+              <Heading variant="h4" color="primary">
+                Account Settings
+              </Heading>
               <TouchableOpacity
                 onPress={() => setShowAccountModal(false)}
                 style={styles.modalCloseButton}
@@ -503,8 +592,11 @@ export default function ProfileScreen() {
                 <X size={24} color={colors.text.secondary} strokeWidth={2} />
               </TouchableOpacity>
             </View>
-            
-            <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
+
+            <ScrollView
+              style={styles.modalScrollView}
+              showsVerticalScrollIndicator={false}
+            >
               <View style={styles.accountForm}>
                 <View style={styles.formSection}>
                   <Text variant="body" color="primary" style={styles.formLabel}>
@@ -514,7 +606,13 @@ export default function ProfileScreen() {
                     placeholder="Enter your display name"
                     value={displayName}
                     onChangeText={setDisplayName}
-                    icon={<User size={20} color={colors.text.secondary} strokeWidth={2} />}
+                    icon={
+                      <User
+                        size={20}
+                        color={colors.text.secondary}
+                        strokeWidth={2}
+                      />
+                    }
                   />
                 </View>
 
@@ -535,14 +633,19 @@ export default function ProfileScreen() {
                 </View>
               </View>
             </ScrollView>
-            
+
             <View style={styles.modalFooter}>
               <Button
                 variant="primary"
                 size="medium"
                 onPress={saveAccountSettings}
-                loading={updateProfileMutation.isPending || updatePasswordMutation.isPending}
-                icon={<Save size={20} color={colors.text.primary} strokeWidth={2} />}
+                loading={
+                  updateProfileMutation.isPending ||
+                  updatePasswordMutation.isPending
+                }
+                icon={
+                  <Save size={20} color={colors.text.primary} strokeWidth={2} />
+                }
                 iconPosition="left"
               >
                 Save Changes

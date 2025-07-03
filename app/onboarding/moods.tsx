@@ -22,16 +22,18 @@ export default function MoodPreferencesScreen() {
     );
   };
 
-  const handleContinue = () => {
-    const genres = params.genres ? JSON.parse(params.genres as string) : [];
-    router.push({
-      pathname: '/onboarding/profile',
-      params: {
-        genres: JSON.stringify(genres),
-        moods: JSON.stringify(selectedMoods),
-      },
-    });
-  };
+  const handleContinue =
+    ({ skip = false }: { skip?: boolean }) =>
+    () => {
+      const genres = params.genres ? JSON.parse(params.genres as string) : [];
+      router.push({
+        pathname: '/onboarding/profile',
+        params: {
+          genres: JSON.stringify(genres),
+          moods: skip ? '' : JSON.stringify(selectedMoods),
+        },
+      });
+    };
 
   return (
     <Screen scrollable paddingHorizontal={24}>
@@ -61,7 +63,7 @@ export default function MoodPreferencesScreen() {
           variant="primary"
           size="large"
           disabled={selectedMoods.length === 0}
-          onPress={handleContinue}
+          onPress={handleContinue({ skip: false })}
           icon={
             <ArrowRight size={20} color={colors.text.primary} strokeWidth={2} />
           }
@@ -74,7 +76,7 @@ export default function MoodPreferencesScreen() {
         <Button
           variant="ghost"
           size="medium"
-          onPress={handleContinue}
+          onPress={handleContinue({ skip: true })}
           style={styles.skipButton}
         >
           <Text variant="body" color="secondary">

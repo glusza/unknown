@@ -1,5 +1,11 @@
 import React, { useState } from 'react';
-import { View, Alert, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import {
+  View,
+  Alert,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { router } from 'expo-router';
 import { Mail } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
@@ -17,22 +23,24 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>(
+    {},
+  );
   const { signIn } = useAuth();
 
   const validateForm = () => {
     const newErrors: { email?: string; password?: string } = {};
-    
+
     if (!email) {
       newErrors.email = 'Email is required';
     } else if (!validateEmail(email)) {
       newErrors.email = 'Please enter a valid email';
     }
-    
+
     if (!password) {
       newErrors.password = 'Password is required';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -43,23 +51,29 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const result = await signIn(email, password);
-      
+
       if (!result.success) {
         // Check if it's an invalid credentials error
-        if (result.error?.message?.includes('Invalid login credentials') || 
-            result.error?.message?.includes('invalid_credentials') ||
-            result.error?.code === 'invalid_credentials') {
+        if (
+          result.error?.message?.includes('Invalid login credentials') ||
+          result.error?.message?.includes('invalid_credentials') ||
+          result.error?.code === 'invalid_credentials'
+        ) {
           // Highlight both fields but only show message under password
-          setErrors({ 
+          setErrors({
             email: '', // Empty string to highlight field without showing message
-            password: 'Invalid email or password'
+            password: 'Invalid email or password',
           });
         } else {
           // For other errors, show a generic alert
-          Alert.alert('Login Failed', result.error?.message || 'An unexpected error occurred');
+          Alert.alert(
+            'Login Failed',
+            result.error?.message || 'An unexpected error occurred',
+          );
         }
+      } else {
+        router.replace('/');
       }
-      // Navigation will be handled by the auth state change in _layout on success
     } catch (error: any) {
       // Fallback error handling
       Alert.alert('Login Failed', 'An unexpected error occurred');
@@ -72,7 +86,7 @@ export default function LoginScreen() {
     setEmail(text);
     // Clear email error when user starts typing
     if (errors.email) {
-      setErrors(prev => ({ ...prev, email: undefined }));
+      setErrors((prev) => ({ ...prev, email: undefined }));
     }
   };
 
@@ -80,13 +94,13 @@ export default function LoginScreen() {
     setPassword(text);
     // Clear password error when user starts typing
     if (errors.password) {
-      setErrors(prev => ({ ...prev, password: undefined }));
+      setErrors((prev) => ({ ...prev, password: undefined }));
     }
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container} 
+    <KeyboardAvoidingView
+      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <Screen paddingHorizontal={24}>
@@ -97,9 +111,9 @@ export default function LoginScreen() {
         />
 
         <View style={styles.form}>
-          <Text 
-            variant="body" 
-            color="secondary" 
+          <Text
+            variant="body"
+            color="secondary"
             align="center"
             style={styles.subtitle}
           >
@@ -113,7 +127,9 @@ export default function LoginScreen() {
             onChangeText={handleEmailChange}
             keyboardType="email-address"
             error={errors.email}
-            icon={<Mail size={20} color={colors.text.secondary} strokeWidth={2} />}
+            icon={
+              <Mail size={20} color={colors.text.secondary} strokeWidth={2} />
+            }
           />
 
           {/* Password Input */}
@@ -131,7 +147,9 @@ export default function LoginScreen() {
             onPress={() => {}}
             style={styles.forgotPassword}
           >
-            <Text variant="link" color="accent">Forgot password?</Text>
+            <Text variant="link" color="accent">
+              Forgot password?
+            </Text>
           </Button>
 
           {/* Login Button */}
@@ -156,7 +174,9 @@ export default function LoginScreen() {
               onPress={() => router.replace('/disclaimer')}
               style={styles.linkButton}
             >
-              <Text variant="link" color="accent">Sign Up</Text>
+              <Text variant="link" color="accent">
+                Sign Up
+              </Text>
             </Button>
           </View>
         </View>

@@ -1,12 +1,16 @@
-import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { AuthService } from '@/lib/auth';
 import { AuthUser } from '@/types';
 import { queryClient } from '@/lib/queryClient';
+import { router } from 'expo-router';
 
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ success: boolean; error: any | null }>;
+  signIn: (
+    email: string,
+    password: string,
+  ) => Promise<{ success: boolean; error: any | null }>;
   signUp: (email: string, password: string) => Promise<void>;
   signOut: (callback?: () => void) => Promise<void>;
   updateProfile: (updates: any) => Promise<void>;
@@ -19,6 +23,12 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) {
+      router.replace('/welcome');
+    }
+  }, [user]);
 
   const refreshUser = async () => {
     try {
@@ -37,7 +47,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     // Listen for auth changes
-    const { data: { subscription } } = AuthService.onAuthStateChange((user) => {
+    const {
+      data: { subscription },
+    } = AuthService.onAuthStateChange((user) => {
       setUser(user);
       setLoading(false);
     });
@@ -47,14 +59,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     const result = await AuthService.signIn(email, password);
-    
+
     if (result.user) {
       // Get the full user data including profile
       const authUser = await AuthService.getCurrentUser();
       setUser(authUser);
       return { success: true, error: null };
     }
-    
+
     return { success: false, error: result.error };
   };
 
@@ -66,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AuthService.signOut();
     callback?.();
     setUser(null);
-    
+
     // Clear all queries from the cache when signing out
     queryClient.clear();
   };

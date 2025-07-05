@@ -3,6 +3,7 @@ import { AuthService } from '@/lib/auth';
 import { AuthUser } from '@/types';
 import { queryClient } from '@/lib/queryClient';
 import { router } from 'expo-router';
+import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -24,11 +25,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const isReady = window?.frameworkReady;
+
   useEffect(() => {
-    if (!user) {
+    if (!user && isReady) {
       router.replace('/welcome');
     }
-  }, [user]);
+  }, [user, isReady]);
 
   const refreshUser = async () => {
     try {

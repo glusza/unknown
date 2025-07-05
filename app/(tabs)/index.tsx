@@ -815,10 +815,7 @@ export default function DiscoverScreen() {
               <TransitionOverlay visible={isTransitioning} />
 
               {/* Main Player Area */}
-              <KeyboardAvoidingView
-                style={{ flex: 1 }}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-              >
+              <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
                 <Animated.View
                   style={[
                     fadeStyle,
@@ -863,6 +860,7 @@ export default function DiscoverScreen() {
                       isReviewFocused={isReviewFocused}
                       setIsReviewFocused={setIsReviewFocused}
                       reviewInputRef={reviewInputRef}
+                      onSkip={skipTrack}
                     />
                   )}
                 </Animated.View>

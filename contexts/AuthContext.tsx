@@ -3,7 +3,6 @@ import { AuthService } from '@/lib/auth';
 import { AuthUser } from '@/types';
 import { queryClient } from '@/lib/queryClient';
 import { router } from 'expo-router';
-import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 
 interface AuthContextType {
   user: AuthUser | null;

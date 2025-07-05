@@ -1,19 +1,20 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import Animated, { 
-  useAnimatedStyle, 
-  useSharedValue, 
-  withTiming, 
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
   interpolate,
   Extrapolate,
+  Extrapolation,
 } from 'react-native-reanimated';
 import { Heading } from '@/components/typography/Heading';
 import { Text } from '@/components/typography/Text';
 import { TextInput } from '@/components/inputs/TextInput';
 import { Button } from '@/components/buttons/Button';
 import { StarRating } from '@/components/rating/StarRating';
-import { colors } from '@/utils/colors';
 import { spacing, borderRadius } from '@/utils/spacing';
+import { colors } from '@/utils/colors';
 
 interface RatingInterfaceProps {
   rating: number;
@@ -25,9 +26,10 @@ interface RatingInterfaceProps {
   isReviewFocused?: boolean;
   setIsReviewFocused?: (focused: boolean) => void;
   reviewInputRef?: React.RefObject<any>;
+  onSkip: () => void;
 }
 
-export function RatingInterface({ 
+export function RatingInterface({
   rating,
   onStarPress,
   showReviewInput,
@@ -36,7 +38,8 @@ export function RatingInterface({
   onSubmitWithReview,
   isReviewFocused,
   setIsReviewFocused,
-  reviewInputRef
+  reviewInputRef,
+  onSkip,
 }: RatingInterfaceProps) {
   // Animation values
   const containerOpacity = useSharedValue(0);
@@ -70,9 +73,9 @@ export function RatingInterface({
           reviewInputAnimation.value,
           [0, 1],
           [30, 0],
-          Extrapolate.CLAMP
-        )
-      }
+          Extrapolation.CLAMP,
+        ),
+      },
     ],
   }));
 
@@ -80,8 +83,8 @@ export function RatingInterface({
     maxHeight: interpolate(
       reviewInputHeight.value,
       [0, 1],
-      [0, 300],
-      Extrapolate.CLAMP
+      [0, 440],
+      Extrapolation.CLAMP,
     ),
   }));
 
@@ -92,7 +95,12 @@ export function RatingInterface({
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <Heading variant="h4" color="primary" align="center" style={styles.title}>
+        <Heading
+          variant="h4"
+          color="primary"
+          align="center"
+          style={styles.title}
+        >
           How does this track make you feel?
         </Heading>
 
@@ -103,12 +111,15 @@ export function RatingInterface({
             onRatingChange={onStarPress}
             size="large"
             style={styles.starRating}
+            readonly={!!showReviewInput}
           />
         </View>
 
         {/* Review Input for High Ratings */}
         {showReviewInput && (
-          <Animated.View style={[reviewInputContainerStyle, styles.reviewInputContainer]}>
+          <Animated.View
+            style={[reviewInputContainerStyle, styles.reviewInputContainer]}
+          >
             <Animated.View style={[reviewInputStyle, styles.reviewInput]}>
               <Text variant="body" color="primary" style={styles.reviewLabel}>
                 Share your thoughts (optional)
@@ -124,7 +135,7 @@ export function RatingInterface({
                 numberOfLines={3}
                 style={styles.textInput}
               />
-              
+
               <Button
                 variant="primary"
                 size="large"
@@ -132,6 +143,22 @@ export function RatingInterface({
               >
                 Submit Rating
               </Button>
+
+              {showReviewInput && (
+                <Button
+                  variant="secondary"
+                  size="medium"
+                  onPress={onSkip}
+                  style={styles.editRatingButton}
+                >
+                  <View style={styles.editRatingButtonContent}>
+                    <Text variant="button">Discover something else</Text>
+                    <Text variant="caption" style={styles.cancelTheReviewText}>
+                      Cancel the review
+                    </Text>
+                  </View>
+                </Button>
+              )}
             </Animated.View>
           </Animated.View>
         )}
@@ -144,7 +171,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     width: '100%',
-    // height: '100%',
   },
   scrollContainer: {
     flexGrow: 1,
@@ -153,7 +179,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   ratingContainer: {
     alignItems: 'center',
@@ -176,5 +202,18 @@ const styles = StyleSheet.create({
   },
   textInput: {
     marginBottom: spacing.sm,
+  },
+  editRatingButton: {
+    width: '100%',
+    marginTop: spacing.md,
+  },
+  editRatingButtonContent: {
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  cancelTheReviewText: {
+    marginTop: spacing.xs,
+    color: colors.text.secondary,
   },
 });

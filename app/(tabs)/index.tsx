@@ -195,6 +195,14 @@ export default function DiscoverScreen() {
     }
   }, [isBroadenedSearch]);
 
+  // Effect to handle broadened search state changes
+  useEffect(() => {
+    if (isBroadenedSearch && state === 'loading') {
+      // When broadened search is enabled and we're in loading state, load a track
+      loadNextTrack({ autoPlay: true });
+    }
+  }, [isBroadenedSearch, state]);
+
   const fadeStyle = useAnimatedStyle(() => ({
     opacity: fadeOpacity.value,
   }));
@@ -304,6 +312,7 @@ export default function DiscoverScreen() {
         sessionMood: selectedSessionMood,
         userPreferences,
         excludeIds: ratedTrackIds,
+        broadenSearch: isBroadenedSearch,
       });
 
       if (!availability?.hasTracksAtAll) {
@@ -509,9 +518,6 @@ export default function DiscoverScreen() {
     setState('loading');
     // Set broadened search mode when user explicitly chooses to broaden
     setIsBroadenedSearch(true);
-    setTimeout(() => {
-      loadNextTrack({ autoPlay: true });
-    }, 500);
   };
 
   const handleChooseDifferentMood = async () => {
@@ -815,10 +821,7 @@ export default function DiscoverScreen() {
               <TransitionOverlay visible={isTransitioning} />
 
               {/* Main Player Area */}
-              <KeyboardAvoidingView
-                style={{ flex: 1 }}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-              >
+              <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
                 <Animated.View
                   style={[
                     fadeStyle,
@@ -863,6 +866,7 @@ export default function DiscoverScreen() {
                       isReviewFocused={isReviewFocused}
                       setIsReviewFocused={setIsReviewFocused}
                       reviewInputRef={reviewInputRef}
+                      onSkip={skipTrack}
                     />
                   )}
                 </Animated.View>

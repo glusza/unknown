@@ -21,7 +21,7 @@ export default function TabLayout() {
           headerShown: false,
           tabBarStyle: {
             backgroundColor: colors.background,
-            borderTopColor: '#28232a',
+            borderColor: '#28232a',
             borderTopWidth: 1,
             height: 100,
             paddingTop: 10,
@@ -85,9 +85,13 @@ export default function TabLayout() {
               marginTop: 6,
             },
             tabBarIcon: () => (
-              <TouchableOpacity onPress={handlePressBolt} style={styles.boltBadge} activeOpacity={0.8}>
-                <Image 
-                  source={require('../../assets/images/black_circle_360x360.png')} 
+              <TouchableOpacity
+                onPress={handlePressBolt}
+                style={styles.boltBadge}
+                activeOpacity={0.8}
+              >
+                <Image
+                  source={require('../../assets/images/black_circle_360x360.png')}
                   style={styles.boltBadgeImage}
                   resizeMode="contain"
                 />
@@ -96,7 +100,7 @@ export default function TabLayout() {
           }}
         />
       </Tabs>
-      
+
       {/* Global Audio Player - positioned above tab bar */}
       <GlobalAudioPlayer />
     </>

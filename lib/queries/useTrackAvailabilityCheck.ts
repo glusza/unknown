@@ -6,16 +6,23 @@ interface TrackAvailabilityFilters {
   sessionMood?: string | null;
   userPreferences?: UserPreferences | null;
   excludeIds?: string[];
+  broadenSearch?: boolean;
 }
 
-export const getUserHasTracksAvailable = async (filters: TrackAvailabilityFilters): Promise<{ hasTracksInPreferences: boolean; hasTracksAtAll: boolean }> => {
+export const getUserHasTracksAvailable = async (
+  filters: TrackAvailabilityFilters,
+): Promise<{ hasTracksInPreferences: boolean; hasTracksAtAll: boolean }> => {
   const excludeIds = filters.excludeIds || [];
 
   // Check if there are any tracks available at all (broadened search)
   const { count: allTracksCount, error: allTracksError } = await supabase
     .from('tracks')
     .select('id', { count: 'exact', head: true })
-    .not('id', 'in', excludeIds.length > 0 ? `(${excludeIds.join(',')})` : '()');
+    .not(
+      'id',
+      'in',
+      excludeIds.length > 0 ? `(${excludeIds.join(',')})` : '()',
+    );
 
   if (allTracksError) throw allTracksError;
 
@@ -25,11 +32,20 @@ export const getUserHasTracksAvailable = async (filters: TrackAvailabilityFilter
     return { hasTracksInPreferences: false, hasTracksAtAll };
   }
 
+  // If broadenSearch is true, we consider all tracks as "in preferences" since we're broadening the search
+  if (filters.broadenSearch) {
+    return { hasTracksInPreferences: true, hasTracksAtAll };
+  }
+
   // Check if there are tracks matching preferences
   let query = supabase
     .from('tracks')
     .select('id', { count: 'exact', head: true })
-    .not('id', 'in', excludeIds.length > 0 ? `(${excludeIds.join(',')})` : '()');
+    .not(
+      'id',
+      'in',
+      excludeIds.length > 0 ? `(${excludeIds.join(',')})` : '()',
+    );
 
   // Apply session mood filter if selected
   if (filters.sessionMood) {
@@ -38,11 +54,17 @@ export const getUserHasTracksAvailable = async (filters: TrackAvailabilityFilter
 
   // Apply user preferences if available and no specific session mood
   if (filters.userPreferences && !filters.sessionMood) {
-    if (filters.userPreferences.preferred_genres && filters.userPreferences.preferred_genres.length > 0) {
+    if (
+      filters.userPreferences.preferred_genres &&
+      filters.userPreferences.preferred_genres.length > 0
+    ) {
       query = query.in('genre', filters.userPreferences.preferred_genres);
     }
 
-    if (filters.userPreferences.preferred_moods && filters.userPreferences.preferred_moods.length > 0) {
+    if (
+      filters.userPreferences.preferred_moods &&
+      filters.userPreferences.preferred_moods.length > 0
+    ) {
       query = query.in('mood', filters.userPreferences.preferred_moods);
     }
   }
@@ -52,4 +74,4 @@ export const getUserHasTracksAvailable = async (filters: TrackAvailabilityFilter
 
   const hasTracksInPreferences = (preferencesCount || 0) > 0;
   return { hasTracksInPreferences, hasTracksAtAll };
-}
+};

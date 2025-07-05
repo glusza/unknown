@@ -1,6 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Modal, TouchableOpacity, ScrollView } from 'react-native';
-import { Award, Flame, Star, TrendingUp, Trophy, X, Users, Crown } from 'lucide-react-native';
+import {
+  View,
+  StyleSheet,
+  Modal,
+  TouchableOpacity,
+  ScrollView,
+} from 'react-native';
+import {
+  Award,
+  Flame,
+  Star,
+  TrendingUp,
+  Trophy,
+  X,
+  Users,
+  Crown,
+} from 'lucide-react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '@/contexts/AuthContext';
 import { Screen } from '@/components/layout/Screen';
@@ -13,10 +28,10 @@ import { UserStats, Badge, LeaderboardData } from '@/types';
 import { TabHeader } from '@/components/navigation';
 import { fonts } from '@/lib/fonts';
 import { useAudioPlayerPadding } from '@/hooks/useAudioPlayerPadding';
-import { 
-  useUserStats, 
-  useLeaderboard, 
-  useBadgesWithStatus 
+import {
+  useUserStats,
+  useLeaderboard,
+  useBadgesWithStatus,
 } from '@/lib/queries';
 
 export default function JourneyScreen() {
@@ -28,21 +43,18 @@ export default function JourneyScreen() {
   const [showLeaderboardModal, setShowLeaderboardModal] = useState(false);
 
   // Tanstack Query hooks
-  const { 
-    data: stats, 
-    isLoading: statsLoading, 
-    refetch: refetchStats 
+  const {
+    data: stats,
+    isLoading: statsLoading,
+    refetch: refetchStats,
   } = useUserStats(user?.id);
-  
-  const { 
-    data: leaderboardData, 
-    isLoading: leaderboardLoading 
-  } = useLeaderboard(user?.id);
-  
-  const { 
-    data: badges = [], 
-    isLoading: badgesLoading 
-  } = useBadgesWithStatus(user?.id);
+
+  const { data: leaderboardData, isLoading: leaderboardLoading } =
+    useLeaderboard(user?.id);
+
+  const { data: badges = [], isLoading: badgesLoading } = useBadgesWithStatus(
+    user?.id,
+  );
 
   const loading = statsLoading || leaderboardLoading || badgesLoading;
 
@@ -52,34 +64,28 @@ export default function JourneyScreen() {
       if (user?.id) {
         refetchStats();
       }
-    }, [user?.id, refetchStats])
+    }, [user?.id, refetchStats]),
   );
 
-  // Calculate favorite genre and mood from stats
-  useEffect(() => {
-    // This would need to be calculated from the actual ratings data
-    // For now, we'll use placeholder values
-    setFavoriteGenre('Electronic');
-    setFavoriteMood('Energetic');
-  }, [stats]);
-
   const getBadgesByCategory = (category: string) => {
-    return badges.filter(badge => badge.category === category);
+    return badges.filter((badge) => badge.category === category);
   };
 
   const getUnlockedBadgesCount = () => {
-    return badges.filter(badge => badge.unlocked).length;
+    return badges.filter((badge) => badge.unlocked).length;
   };
 
   const getNewestBadges = () => {
-    return badges.filter(badge => badge.unlocked).slice(-3);
+    return badges.filter((badge) => badge.unlocked).slice(-3);
   };
 
   if (loading) {
     return (
       <Screen withoutBottomSafeArea>
         <View style={styles.loadingContainer}>
-          <Text variant="body" color="primary">Loading your journey...</Text>
+          <Text variant="body" color="primary">
+            Loading your journey...
+          </Text>
         </View>
       </Screen>
     );
@@ -89,16 +95,18 @@ export default function JourneyScreen() {
     return (
       <Screen withoutBottomSafeArea>
         <View style={styles.loadingContainer}>
-          <Text variant="body" color="primary">No journey data available</Text>
+          <Text variant="body" color="primary">
+            No journey data available
+          </Text>
         </View>
       </Screen>
     );
   }
 
   return (
-    <Screen 
-      scrollable 
-      paddingHorizontal={24} 
+    <Screen
+      scrollable
+      paddingHorizontal={24}
       withoutBottomSafeArea
       contentContainerStyle={{ paddingBottom }}
     >
@@ -114,27 +122,47 @@ export default function JourneyScreen() {
             <Text variant="button" color="primary" style={styles.xpAmount}>
               {stats.points.toLocaleString()}
             </Text>
-            <Text variant="caption" color="secondary">Total XP</Text>
+            <Text variant="caption" color="secondary">
+              Total XP
+            </Text>
           </View>
-          
+
           <View style={styles.xpStats}>
             <View style={styles.xpStatItem}>
               <Text variant="body" color="primary" style={styles.xpStatValue}>
                 {getUnlockedBadgesCount()}
               </Text>
-              <Text variant="caption" color="secondary" style={styles.xpStatLabel}>Badges</Text>
+              <Text
+                variant="caption"
+                color="secondary"
+                style={styles.xpStatLabel}
+              >
+                Badges
+              </Text>
             </View>
             <View style={styles.xpStatItem}>
               <Text variant="body" color="primary" style={styles.xpStatValue}>
                 {stats.totalTracksRatedCount}
               </Text>
-              <Text variant="caption" color="secondary" style={styles.xpStatLabel}>Tracks Rated</Text>
+              <Text
+                variant="caption"
+                color="secondary"
+                style={styles.xpStatLabel}
+              >
+                Tracks Rated
+              </Text>
             </View>
             <View style={styles.xpStatItem}>
               <Text variant="body" color="primary" style={styles.xpStatValue}>
                 {stats.averageRating.toFixed(1)}
               </Text>
-              <Text variant="caption" color="secondary" style={styles.xpStatLabel}>Avg Rating</Text>
+              <Text
+                variant="caption"
+                color="secondary"
+                style={styles.xpStatLabel}
+              >
+                Avg Rating
+              </Text>
             </View>
           </View>
         </View>
@@ -145,34 +173,61 @@ export default function JourneyScreen() {
         <Heading variant="h4" color="primary" style={styles.sectionTitle}>
           Discovery Stats
         </Heading>
-        
+
         <View style={styles.quickStatsGrid}>
           <View style={styles.quickStatItem}>
-            <Flame size={24} color={colors.text.secondary} strokeWidth={2} style={styles.quickStatIcon} />
+            <Flame
+              size={24}
+              color={colors.text.secondary}
+              strokeWidth={2}
+              style={styles.quickStatIcon}
+            />
             <Text variant="body" color="primary" style={styles.quickStatValue}>
               {stats.streakDays}
             </Text>
-            <Text variant="caption" color="secondary" style={styles.quickStatLabel}>
+            <Text
+              variant="caption"
+              color="secondary"
+              style={styles.quickStatLabel}
+            >
               Current Streak
             </Text>
           </View>
 
           <View style={styles.quickStatItem}>
-            <Star size={24} color={colors.text.secondary} strokeWidth={2} style={styles.quickStatIcon} />
+            <Star
+              size={24}
+              color={colors.text.secondary}
+              strokeWidth={2}
+              style={styles.quickStatIcon}
+            />
             <Text variant="body" color="primary" style={styles.quickStatValue}>
               {stats.reviewsWritten}
             </Text>
-            <Text variant="caption" color="secondary" style={styles.quickStatLabel}>
+            <Text
+              variant="caption"
+              color="secondary"
+              style={styles.quickStatLabel}
+            >
               Reviews Written
             </Text>
           </View>
 
           <View style={styles.quickStatItem}>
-            <TrendingUp size={24} color={colors.text.secondary} strokeWidth={2} style={styles.quickStatIcon} />
+            <TrendingUp
+              size={24}
+              color={colors.text.secondary}
+              strokeWidth={2}
+              style={styles.quickStatIcon}
+            />
             <Text variant="body" color="primary" style={styles.quickStatValue}>
               {stats.consecutiveListenStreak}
             </Text>
-            <Text variant="caption" color="secondary" style={styles.quickStatLabel}>
+            <Text
+              variant="caption"
+              color="secondary"
+              style={styles.quickStatLabel}
+            >
               Listen Streak
             </Text>
           </View>
@@ -180,35 +235,55 @@ export default function JourneyScreen() {
       </View>
 
       {/* Music Preferences */}
-      {favoriteGenre || favoriteMood ? <View style={styles.section}>
-        <Heading variant="h4" color="primary" style={styles.sectionTitle}>
-          Your Music DNA
-        </Heading>
-        
-        <View style={styles.preferencesContainer}>
-          {favoriteGenre ? (
-            <View>
-              <Text variant="caption" color="secondary" style={styles.preferenceLabel}>
-                Favorite Genre
-              </Text>
-              <Text variant="body" color="primary" style={styles.preferenceValue}>
-                {favoriteGenre}
-              </Text>
-            </View>
-          ) : null}
-          
-          {favoriteMood ? (
-            <View>
-              <Text variant="caption" color="secondary" style={styles.preferenceLabel}>
-                Favorite Mood
-              </Text>
-              <Text variant="body" color="primary" style={styles.preferenceValue}>
-                {favoriteMood}
-              </Text>
-            </View>
-          ) : null}
+      {/* FIX STATS BEFORE ADDING */}
+      {/* Right now we don't have any stats to show favorite genre or mood */}
+      {/* {favoriteGenre || favoriteMood ? (
+        <View style={styles.section}>
+          <Heading variant="h4" color="primary" style={styles.sectionTitle}>
+            Your Music DNA
+          </Heading>
+
+          <View style={styles.preferencesContainer}>
+            {favoriteGenre ? (
+              <View>
+                <Text
+                  variant="caption"
+                  color="secondary"
+                  style={styles.preferenceLabel}
+                >
+                  Favorite Genre
+                </Text>
+                <Text
+                  variant="body"
+                  color="primary"
+                  style={styles.preferenceValue}
+                >
+                  {favoriteGenre}
+                </Text>
+              </View>
+            ) : null}
+
+            {favoriteMood ? (
+              <View>
+                <Text
+                  variant="caption"
+                  color="secondary"
+                  style={styles.preferenceLabel}
+                >
+                  Favorite Mood
+                </Text>
+                <Text
+                  variant="body"
+                  color="primary"
+                  style={styles.preferenceValue}
+                >
+                  {favoriteMood}
+                </Text>
+              </View>
+            ) : null}
+          </View>
         </View>
-      </View> : null}
+      ) : null} */}
 
       {/* Newest Achievements */}
       {getNewestBadges().length > 0 ? (
@@ -216,16 +291,24 @@ export default function JourneyScreen() {
           <Heading variant="h4" color="primary" style={styles.sectionTitle}>
             Recent Achievements
           </Heading>
-          
+
           <View style={styles.newestBadgesContainer}>
             {getNewestBadges().map((badge) => (
               <View key={badge.id} style={styles.newestBadgeItem}>
                 <Text style={styles.badgeEmoji}>{badge.icon}</Text>
                 <View style={styles.newestBadgeInfo}>
-                  <Text variant="body" color="primary" style={styles.newestBadgeName}>
+                  <Text
+                    variant="body"
+                    color="primary"
+                    style={styles.newestBadgeName}
+                  >
                     {badge.name}
                   </Text>
-                  <Text variant="caption" color="secondary" style={styles.newestBadgeDescription}>
+                  <Text
+                    variant="caption"
+                    color="secondary"
+                    style={styles.newestBadgeDescription}
+                  >
                     {badge.description}
                   </Text>
                 </View>
@@ -242,7 +325,9 @@ export default function JourneyScreen() {
             variant="secondary"
             size="medium"
             onPress={() => setShowBadgesModal(true)}
-            icon={<Trophy size={20} color={colors.text.primary} strokeWidth={2} />}
+            icon={
+              <Trophy size={20} color={colors.text.primary} strokeWidth={2} />
+            }
             iconPosition="left"
             style={styles.actionButton}
           >
@@ -253,7 +338,9 @@ export default function JourneyScreen() {
             variant="secondary"
             size="medium"
             onPress={() => setShowLeaderboardModal(true)}
-            icon={<Crown size={20} color={colors.text.primary} strokeWidth={2} />}
+            icon={
+              <Crown size={20} color={colors.text.primary} strokeWidth={2} />
+            }
             iconPosition="left"
             style={styles.actionButton}
           >
@@ -272,7 +359,9 @@ export default function JourneyScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Heading variant="h4" color="primary">Your Badges</Heading>
+              <Heading variant="h4" color="primary">
+                Your Badges
+              </Heading>
               <TouchableOpacity
                 onPress={() => setShowBadgesModal(false)}
                 style={styles.modalCloseButton}
@@ -280,43 +369,58 @@ export default function JourneyScreen() {
                 <X size={24} color={colors.text.secondary} strokeWidth={2} />
               </TouchableOpacity>
             </View>
-            
+
             {/* if no unlocked badges, show a message */}
             {getUnlockedBadgesCount() === 0 ? (
               <View style={styles.noBadgesContainer}>
-                <Text variant="body" color="secondary">No badges unlocked yet</Text>
+                <Text variant="body" color="secondary">
+                  No badges unlocked yet
+                </Text>
               </View>
             ) : null}
 
-            <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
-              {['discovery', 'engagement', 'critic', 'listening', 'social', 'special', 'experimental'].map((category) => {
-                const categoryBadges = getBadgesByCategory(category).filter(badge => badge.unlocked);
-                
+            <ScrollView
+              style={styles.modalScrollView}
+              showsVerticalScrollIndicator={false}
+            >
+              {[
+                'discovery',
+                'engagement',
+                'critic',
+                'listening',
+                'social',
+                'special',
+                'experimental',
+              ].map((category) => {
+                const categoryBadges = getBadgesByCategory(category).filter(
+                  (badge) => badge.unlocked,
+                );
+
                 // if user has no badges in this category, don't show the category
                 if (categoryBadges.length === 0) return null;
                 return (
                   <View key={category} style={styles.badgeCategoryContainer}>
-                    <Text variant="body" color="primary" style={styles.badgeCategoryTitle}>
-                      {category.charAt(0).toUpperCase() + category.slice(1)} Badges
+                    <Text
+                      variant="body"
+                      color="primary"
+                      style={styles.badgeCategoryTitle}
+                    >
+                      {category.charAt(0).toUpperCase() + category.slice(1)}{' '}
+                      Badges
                     </Text>
                     <View style={styles.badgesGrid}>
                       {categoryBadges.map((badge) => (
-                        <View
-                          key={badge.id}
-                          style={[
-                            styles.badgeItem,
-                          ]}
-                        >
+                        <View key={badge.id} style={[styles.badgeItem]}>
                           <Text style={styles.badgeEmoji}>{badge.icon}</Text>
-                          <Text 
-                            variant="caption" 
-                            color='primary'
+                          <Text
+                            variant="caption"
+                            color="primary"
                             style={styles.badgeName}
                           >
                             {badge.name}
                           </Text>
-                          <Text 
-                            variant="caption" 
+                          <Text
+                            variant="caption"
                             color="secondary"
                             style={styles.badgeDescription}
                           >
@@ -343,7 +447,9 @@ export default function JourneyScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Heading variant="h4" color="primary">Leaderboard</Heading>
+              <Heading variant="h4" color="primary">
+                Leaderboard
+              </Heading>
               <TouchableOpacity
                 onPress={() => setShowLeaderboardModal(false)}
                 style={styles.modalCloseButton}
@@ -351,8 +457,11 @@ export default function JourneyScreen() {
                 <X size={24} color={colors.text.secondary} strokeWidth={2} />
               </TouchableOpacity>
             </View>
-            
-            <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
+
+            <ScrollView
+              style={styles.modalScrollView}
+              showsVerticalScrollIndicator={false}
+            >
               {leaderboardData ? (
                 <View style={styles.leaderboardContainer}>
                   <View style={styles.leaderboardList}>
@@ -361,28 +470,33 @@ export default function JourneyScreen() {
                         key={entry.rank}
                         style={[
                           styles.leaderboardItem,
-                          entry.is_current_user && styles.leaderboardItemCurrent
+                          entry.is_current_user &&
+                            styles.leaderboardItemCurrent,
                         ]}
                       >
                         <View style={styles.leaderboardRank}>
-                          <Text 
-                            variant="body" 
-                            color='primary'
+                          <Text
+                            variant="body"
+                            color="primary"
                             style={styles.leaderboardRankText}
                           >
                             #{entry.rank}
                           </Text>
                         </View>
                         <View style={styles.leaderboardInfo}>
-                          <Text 
-                            variant="body" 
-                            color='primary'
-                            style={[styles.leaderboardName, entry.is_current_user && styles.leaderboardNameCurrent]}
+                          <Text
+                            variant="body"
+                            color="primary"
+                            style={[
+                              styles.leaderboardName,
+                              entry.is_current_user &&
+                                styles.leaderboardNameCurrent,
+                            ]}
                           >
                             {entry.display_name}
                           </Text>
-                          <Text 
-                            variant="caption" 
+                          <Text
+                            variant="caption"
                             color="secondary"
                             style={styles.leaderboardXP}
                           >
@@ -390,7 +504,11 @@ export default function JourneyScreen() {
                           </Text>
                         </View>
                         {entry.is_current_user && (
-                          <Users size={16} color={colors.text.primary} strokeWidth={2} />
+                          <Users
+                            size={16}
+                            color={colors.text.primary}
+                            strokeWidth={2}
+                          />
                         )}
                       </View>
                     ))}
@@ -398,7 +516,9 @@ export default function JourneyScreen() {
                 </View>
               ) : (
                 <View style={styles.noBadgesContainer}>
-                  <Text variant="body" color="secondary">No leaderboard data available</Text>
+                  <Text variant="body" color="secondary">
+                    No leaderboard data available
+                  </Text>
                 </View>
               )}
             </ScrollView>

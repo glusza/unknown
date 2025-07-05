@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Stack, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { AudioProvider } from '@/contexts/AudioContext';
 import { router } from 'expo-router';
 import { queryClient } from '@/lib/queryClient';
+import { BackHandler } from 'react-native';
 import '../global.css';
 
 // Prevent splash screen from auto-hiding
@@ -18,6 +19,21 @@ function RootLayoutNav() {
   const { user, loading } = useAuth();
   const hasRedirected = useRef(false);
   const pathname = usePathname();
+
+  // Prevent Android back button from doing anything
+  useEffect(() => {
+    const backAction = () => {
+      // Return true to prevent default back behavior
+      return true;
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction,
+    );
+
+    return () => backHandler.remove();
+  }, []);
 
   useEffect(() => {
     if (!loading && !hasRedirected.current) {
